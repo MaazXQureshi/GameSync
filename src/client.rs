@@ -1,55 +1,69 @@
-use message_io::node::{self, NodeEvent, NodeHandler};
-use message_io::network::{Endpoint, NetEvent, Transport};
-use serde::{Deserialize, Serialize};
+use crate::error::GameSyncError;
+use crate::networking::{ClientEvent, ServerEvent, Websocket};
+use crate::store::Store;
+use message_io::network::SendStatus;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+use uuid::Uuid;
 
-#[derive(Serialize, Deserialize)]
-pub struct ChatMessageRequest {
-    pub message: String,
-    pub lobby_id: String
+pub struct GameSyncClient {
+    // Underlying websocket connection and state management
+    websocket: Websocket,
+    store: Arc<Mutex<Store>>,
 }
 
-pub enum GameEvent {
-    UserMessage(ChatMessageRequest),
-}
+impl GameSyncClient {
+    pub fn connect(url: &str) -> Result<Self, GameSyncError> {
+        let store = Arc::new(Mutex::new(Store::new()));
+        let store_clone = Arc::clone(&store);
 
-pub struct Websocket {
-    handler: NodeHandler<GameEvent>,
-    server: Endpoint
-}
+        let event_handler = move |event: ServerEvent| {
+            if let Ok(mut store_locked) = store_clone.lock() {
+                store_locked.on_event(event);
+            }
+        };
+        let websocket = Websocket::new(url, event_handler)?;
 
-impl Websocket {
-    pub fn connect(url: &str) -> Result<Self, String> {
-        let (handler, listener) = node::split();
-        let (server, _) = handler.network().connect(Transport::Ws, url).unwrap();
-
-        let h = handler.clone();
-        listener.for_each(move |event| match event {
-            NodeEvent::Network(net_event) => match net_event {
-                NetEvent::Accepted(_, _) => {},
-                NetEvent::Connected(_, _) => {},
-                NetEvent::Message(_, message) => {
-                    let payload = serde_json::from_slice(&message).unwrap();
-                    h.signals().send(GameEvent::UserMessage(payload));
-                },
-                NetEvent::Disconnected(_) => {}
-            },
-            NodeEvent::Signal(msg) => {
-                match msg {
-                    GameEvent::UserMessage(payload) => {
-                        println!("Received message: {}", serde_json::to_string_pretty(&payload).unwrap());
+        loop {
+            let store = store.lock();
+            match store {
+                Ok(store) => {
+                    if store.is_connected != false {
+                        break;
                     }
                 }
+                Err(_) => {}
             }
-        });
-        Ok(Websocket { handler, server })
+
+            thread::sleep(Duration::from_millis(100));
+        }
+
+        let client = Self { websocket, store };
+        Ok(client)
     }
 
-    pub fn send_event(&mut self, event: GameEvent) {
-        match event {
-            GameEvent::UserMessage(payload) => {
-                let payload = serde_json::to_string(&payload).unwrap();
-                self.handler.network().send(self.server, payload.as_ref());
-            }
+    pub fn send_to_all_clients(&mut self, message: String) -> Result<SendStatus, GameSyncError> {
+        Ok(self.websocket.send_event(ClientEvent::Broadcast(message))?)
+    }
+
+    pub fn send_to(&mut self, to: Uuid, message: String) -> Result<SendStatus, GameSyncError> {
+        Ok(self.websocket.send_event(ClientEvent::SendTo(to.to_string(), message))?)
+    }
+
+    pub fn get_self(&self) -> Result<Uuid, GameSyncError> {
+        let store = self.store.lock();
+        match store {
+            Ok(store) => { Ok(store.get_player_id()) }
+            Err(_) => { Err(GameSyncError::LockError) }
+        }
+    }
+
+    pub fn get_players(&self) -> Result<Vec<Uuid>, GameSyncError> {
+        let store = self.store.lock();
+        match store {
+            Ok(store) => { Ok(store.get_players()) }
+            Err(_) => { Err(GameSyncError::LockError) }
         }
     }
 }

@@ -1,3 +1,4 @@
-
-mod client;
-mod lobby;
+mod networking;
+pub mod client;
+mod store;
+mod error;
