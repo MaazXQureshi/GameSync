@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use actix::ActorContext;
 use actix::AsyncContext;
+use gamesync_server::server::GameServer;
 
 // ChatRoom actor that manages connected sessions and broadcasts messages
 struct ChatRoom {
@@ -135,14 +136,17 @@ async fn ws_handler(
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let chat_room = ChatRoom::new().start();
+    // let chat_room = ChatRoom::new().start();
+    let mut server = GameServer::new("8080").unwrap();
+    server.process_messages();
+    Ok(())
 
-    HttpServer::new(move || {
-        App::new()
-            .app_data(web::Data::new(chat_room.clone()))
-            .route("/ws/", web::get().to(ws_handler))
-    })
-    .bind("127.0.0.1:8080")?
-    .run()
-    .await
+    // HttpServer::new(move || {
+    //     App::new()
+    //         .app_data(web::Data::new(chat_room.clone()))
+    //         // .route("/ws/", web::get().to(ws_handler))
+    // })
+    // .bind("127.0.0.1:8080")?
+    // .run()
+    // .await
 }

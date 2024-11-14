@@ -10,3 +10,4 @@ tungstenite = "0.17"
 futures = "0.3"
 futures-util = "0.3.31"
 url = "2.5.2"
+gamesync_client = {path = "../../gamesync_client"}
