@@ -9,6 +9,10 @@ pub enum GameSyncError {
     SocketError(SocketError),
     UuidError(UuidError),
     SendError,
+    LobbyFindError,
+    LobbyOwnerError,
+    LobbyInviteError,
+    PlayerFindError,
 }
 
 impl From<ParseError> for GameSyncError {
@@ -36,6 +40,10 @@ impl fmt::Display for GameSyncError {
             GameSyncError::SocketError(err) => write!(f, "Socket error: {}.", err),
             GameSyncError::SendError => write!(f, "Failed to send socket event"),
             GameSyncError::UuidError(err) => write!(f, "Failed to parse uuid: {}", err),
+            GameSyncError::LobbyFindError => write!(f, "Failed to find lobby"),
+            GameSyncError::LobbyOwnerError => write!(f, "Invalid permissions: Player not lobby owner"),
+            GameSyncError::LobbyInviteError => write!(f, "Error inviting: Player not part of lobby"),
+            GameSyncError::PlayerFindError => write!(f, "Player does not exist"),
         }
     }
 }
