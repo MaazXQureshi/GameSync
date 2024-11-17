@@ -10,9 +10,15 @@ pub enum GameSyncError {
     UuidError(UuidError),
     SendError,
     LobbyFindError,
+    LobbyCreateError,
+    LobbyJoinError,
+    LobbyFullError,
     LobbyOwnerError,
+    LobbyLeaveError,
     LobbyInviteError,
     PlayerFindError,
+    LobbyPlayerError,
+    LobbyMessageError,
 }
 
 impl From<ParseError> for GameSyncError {
@@ -41,8 +47,14 @@ impl fmt::Display for GameSyncError {
             GameSyncError::SendError => write!(f, "Failed to send socket event"),
             GameSyncError::UuidError(err) => write!(f, "Failed to parse uuid: {}", err),
             GameSyncError::LobbyFindError => write!(f, "Failed to find lobby"),
-            GameSyncError::LobbyOwnerError => write!(f, "Invalid permissions: Player not lobby owner"),
-            GameSyncError::LobbyInviteError => write!(f, "Error inviting: Player not part of lobby"),
+            GameSyncError::LobbyCreateError => write!(f, "Failed to create lobby. Player already part of a lobby"),
+            GameSyncError::LobbyJoinError => write!(f, "Failed to join lobby. Player already part of a lobby"),
+            GameSyncError::LobbyFullError => write!(f, "Failed to join lobby. Lobby full"),
+            GameSyncError::LobbyLeaveError => write!(f, "Failed to leave lobby. Player not part of lobby"),
+            GameSyncError::LobbyOwnerError => write!(f, "Invalid permissions. Player not lobby owner"),
+            GameSyncError::LobbyInviteError => write!(f, "Failed to invite. Player not part of lobby"),
+            GameSyncError::LobbyPlayerError => write!(f, "Failed to send message. Player not in a lobby"),
+            GameSyncError::LobbyMessageError => write!(f, "Failed to send message. Player not part of lobby"),
             GameSyncError::PlayerFindError => write!(f, "Player does not exist"),
         }
     }

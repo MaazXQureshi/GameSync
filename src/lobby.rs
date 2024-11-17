@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lobby {
+    pub(crate) lobby_id: Uuid,
     pub params: LobbyParams,
     pub leader: Player,
     pub status: LobbyStatus,
