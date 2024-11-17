@@ -71,7 +71,6 @@ impl DataStore {
         }
 
         self.endpoint_user_map.remove(&endpoint);
-
     }
 
     /* GLOBAL LOBBIES HASHMAP FUNCTIONS */
@@ -158,6 +157,12 @@ impl DataStore {
         }
     }
 
+    pub fn print_region_lobby_map(&self) {
+        for entry in self.region_lobby_map.iter() {
+            println!("Lobby_ID {:?} Region {:?}", entry.key(), entry.value());
+        }
+    }
+
     /* <PLAYER_ID, (PLAYER, LOBBY)> HASHMAP FUNCTIONS */
     pub fn add_player(&self, player_id: Uuid, player: Player) {
         self.player_map.insert(player_id, (player, None));
@@ -198,6 +203,15 @@ impl DataStore {
     pub fn delete_player(&self, player_id: Uuid) {
         self.player_map.remove(&player_id);
     }
+
+    pub fn print_player_map(&self) {
+        for entry in self.player_map.iter() {
+            println!("Player {:?} Lobby {:?}", entry.value().clone().0, entry.value().clone().1);
+
+        }
+    }
+
+    /* MISCELLANEOUS FUNCTIONS */
 
     pub fn lobby_size(&self) -> usize {
         self.server_params.player_count
