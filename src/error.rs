@@ -19,6 +19,12 @@ pub enum GameSyncError {
     PlayerFindError,
     LobbyPlayerError,
     LobbyMessageError,
+    LobbySizeError,
+    LobbyQueueError,
+    LobbyCheckError,
+    LobbyDeleteError,
+    LobbyStopError,
+    LeaveGameError,
 }
 
 impl From<ParseError> for GameSyncError {
@@ -56,6 +62,12 @@ impl fmt::Display for GameSyncError {
             GameSyncError::LobbyPlayerError => write!(f, "Failed to send message. Player not in a lobby"),
             GameSyncError::LobbyMessageError => write!(f, "Failed to send message. Player not part of lobby"),
             GameSyncError::PlayerFindError => write!(f, "Player does not exist"),
+            GameSyncError::LobbySizeError => write!(f, "Failed to queue. Lobby is not full"),
+            GameSyncError::LobbyQueueError => write!(f, "Lobby is already in queue or in-game"),
+            GameSyncError::LobbyCheckError => write!(f, "Failed to check lobby. Lobby is not currently in queue"),
+            GameSyncError::LobbyDeleteError => write!(f, "Failed to delete lobby. Lobby is not idle"),
+            GameSyncError::LobbyStopError => write!(f, "Failed to stop queue. Lobby is not currently in queue"),
+            GameSyncError::LeaveGameError => write!(f, "Failed to leave game. Lobby is not currently in-game"),
         }
     }
 }

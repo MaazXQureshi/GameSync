@@ -8,7 +8,18 @@ pub struct Lobby {
     pub params: LobbyParams,
     pub leader: Player,
     pub status: LobbyStatus,
-    pub player_list: Vec<Player>
+    pub player_list: Vec<Player>,
+    pub queue_threshold: usize
+}
+
+impl Lobby {
+    pub fn average_rating(&self) -> usize {
+        if self.player_list.len() != 0 {
+            self.player_list.iter().map(|player| player.rating).sum::<usize>() / self.player_list.len()
+        } else {
+            0
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,7 +27,7 @@ pub struct LobbyParams {
     name: String,
 	pub visibility: Visibility,
     pub region: Region,
-    mode: GameMode
+    pub mode: GameMode
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
@@ -47,7 +58,7 @@ pub enum GameMode {
     Competitive
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub enum LobbyStatus {
     Idle,
     Queueing,

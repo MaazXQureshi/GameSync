@@ -4,8 +4,10 @@ use uuid::Uuid;
 use crate::lobby::{Lobby, Player, Region, Visibility};
 use crate::server_params::ServerParams;
 use dashmap::DashMap;
+use std::cmp::Ordering;
 use std::sync::Arc;
 use crate::error::GameSyncError;
+use std::collections::VecDeque;
 
 pub struct DataStore {
     user_endpoint_map: Arc<DashMap<Uuid, Endpoint>>,
@@ -13,6 +15,8 @@ pub struct DataStore {
     global_lobby_map: Arc<DashMap<Region, Arc<DashMap<Uuid, Lobby>>>>,
     region_lobby_map: Arc<DashMap<Uuid, Region>>,
     player_map: Arc<DashMap<Uuid, (Player, Option<Lobby>)>>,
+    competitive_queue_map: Arc<DashMap<Region, Vec<Lobby>>>,
+    casual_queue_map: Arc<DashMap<Region, VecDeque<Lobby>>>,
     server_params: ServerParams,
 }
 
@@ -21,11 +25,17 @@ impl DataStore {
         let new_user_endpoint_map: Arc<DashMap<Uuid, Endpoint>> = Arc::new(DashMap::new());
         let new_endpoint_user_map: Arc<DashMap<Endpoint, Uuid>> = Arc::new(DashMap::new());
         let new_global_lobby_map: Arc<DashMap<Region, Arc<DashMap<Uuid, Lobby>>>> = Arc::new(DashMap::new());
+        let new_competitive_queue_map: Arc<DashMap<Region, Vec<Lobby>>> = Arc::new(DashMap::new());
+        let new_casual_queue_map: Arc<DashMap<Region, VecDeque<Lobby>>> = Arc::new(DashMap::new());
+
         for region in Region::iter() {
             new_global_lobby_map.entry(region).or_insert_with(|| Arc::new(DashMap::new()));
+            new_competitive_queue_map.entry(region).or_insert_with(|| Vec::new());
+            new_casual_queue_map.entry(region).or_insert_with(|| VecDeque::new());
         }
         let new_region_lobby_map: Arc<DashMap<Uuid, Region>> = Arc::new(DashMap::new());
         let new_player_map: Arc<DashMap<Uuid, (Player, Option<Lobby>)>> = Arc::new(DashMap::new());
+
 
         Self {
             user_endpoint_map: Arc::clone(&new_user_endpoint_map),
@@ -33,6 +43,8 @@ impl DataStore {
             global_lobby_map: Arc::clone(&new_global_lobby_map),
             region_lobby_map: Arc::clone(&new_region_lobby_map),
             player_map: Arc::clone(&new_player_map),
+            competitive_queue_map: Arc::clone(&new_competitive_queue_map),
+            casual_queue_map: Arc::clone(&new_casual_queue_map),
             server_params: server_params.clone()
         }
     }
@@ -210,6 +222,152 @@ impl DataStore {
 
         }
     }
+
+    /* CASUAL QUEUE FUNCTIONS */
+    
+    pub fn add_casual_lobby(&mut self, region: Region, lobby: Lobby) {
+        if let Some(mut region_lobbies) = self.casual_queue_map.get_mut(&region) {
+            region_lobbies.push_back(lobby);
+        }
+    }
+
+    pub fn get_casual_lobbies(&self, region: Region) -> Option<VecDeque<Lobby>> {
+        self.casual_queue_map.get(&region).map(|lobbies| lobbies.clone())
+    }
+
+    pub fn check_casual_lobby(&self, region: Region, lobby_id: Uuid) -> Option<(Lobby, Lobby)> {
+        if let Some(mut lobbies) = self.casual_queue_map.get_mut(&region) {
+            if lobbies.len() < 2 { // This should not happen
+                return None;
+            }
+            let target_index = lobbies.iter().position(|l| l.lobby_id == lobby_id)?;
+
+            // Temporarily remove the target lobby from the queue
+            let lobby1 = lobbies.remove(target_index).unwrap();
+
+            // Try to match with the next available lobby (from the front or back of the queue)
+            let lobby2 = if !lobbies.is_empty() {
+                lobbies.pop_front() // Remove from the front
+            } else {
+                None
+            };
+
+            if let Some(lobby2) = lobby2 {
+                return Some((lobby1, lobby2));
+            } else {
+                // Reinsert the lobby if no match was found
+                lobbies.push_back(lobby1);
+            }
+        }
+        None
+    }
+
+    pub fn remove_casual_lobby(&self, region: Region, lobby_id: Uuid) { // This is done this way to avoid shifting the entire VecDeque
+        if let Some(mut region_lobbies) = self.casual_queue_map.get_mut(&region) {
+            if let Some(index) = region_lobbies.iter().position(|l| l.lobby_id == lobby_id) {
+                // Use split_off to remove the element
+                let mut split_off = region_lobbies.split_off(index);
+                split_off.pop_front(); // Remove the first element of the split-off part
+                region_lobbies.append(&mut split_off); // Rejoin the remaining elements
+            }
+        }
+    }
+
+    pub fn print_casual_lobbies(&self) {
+        for entry in self.casual_queue_map.iter() {
+            println!("Region {:?}", entry.key());
+            for lobby in entry.value() {
+                println!("  Lobby: {:?}", lobby);
+            }
+        }
+    }
+
+    /* COMPETITIVE QUEUE FUNCTIONS */
+    // Lobby vector is ordered by average rating
+    pub fn add_competitive_lobby(&mut self, region: Region, lobby: Lobby) {
+        if let Some(mut lobbies) = self.competitive_queue_map.get_mut(&region) {
+            let avg_rating = lobby.average_rating();
+            let position = lobbies
+                .binary_search_by(|l| l.average_rating().partial_cmp(&avg_rating).unwrap_or(Ordering::Equal))
+                .unwrap_or_else(|e| e);
+            lobbies.insert(position, lobby);
+        }
+    }
+
+    pub fn get_competitive_lobbies(&self, region: Region) -> Option<Vec<Lobby>> {
+        self.competitive_queue_map.get(&region).map(|lobbies| lobbies.clone())
+    }
+
+    pub fn check_competitive_lobby(&self, region: Region, lobby_id: Uuid, threshold: usize) -> Option<(Lobby, Lobby)> {
+        if let Some(mut lobbies) = self.competitive_queue_map.get_mut(&region) {
+            if lobbies.is_empty() { // This should ideally never happen
+                return None;
+            }
+
+            let target_index = lobbies.iter().position(|lobby| lobby.lobby_id == lobby_id)?;
+
+            let lobby1 = lobbies[target_index].clone();
+            let avg_rating1 = lobby1.average_rating();
+            let range_min = avg_rating1 - threshold;
+            let range_max = avg_rating1 + threshold;
+
+            let lower_bound = lobbies
+                .binary_search_by(|l| {
+                    if l.average_rating() < range_min {
+                        Ordering::Less
+                    } else {
+                        Ordering::Greater
+                    }
+                })
+                .unwrap_or_else(|e| e);
+
+            let upper_bound = lobbies
+                .binary_search_by(|l| {
+                    if l.average_rating() > range_max {
+                        Ordering::Greater
+                    } else {
+                        Ordering::Less
+                    }
+                })
+                .unwrap_or_else(|e| e);
+
+            for i in lower_bound..upper_bound {
+                if i == target_index {
+                    continue; // Skip the target lobby itself
+                }
+
+                let lobby2 = &lobbies[i];
+                let avg_rating2 = lobby2.average_rating();
+                let range_min2 = avg_rating2 - lobby2.queue_threshold;
+                let range_max2 = avg_rating2 + lobby2.queue_threshold;
+
+                if range_min <= range_max2 && range_min2 <= range_max {
+                    let matched_lobby2 = lobbies.remove(i);
+                    let matched_lobby1 = lobbies.remove(target_index);
+                    return Some((matched_lobby1.clone(), matched_lobby2.clone()));
+                }
+            }
+        }
+        None  // This could either mean match not found or match was already found before (hence removed from queue). Client's responsibility for stop searching once MatchFound is received OR do a check for if lobby is already InGame state
+    }
+
+    pub fn remove_competitive_lobby(&mut self, region: Region, lobby_id: Uuid) {
+        if let Some(mut region_lobbies) = self.competitive_queue_map.get_mut(&region) {
+            if let Some(index) = region_lobbies.iter().position(|l| l.lobby_id == lobby_id) {
+                region_lobbies.remove(index);
+            }
+        }
+    }
+
+    pub fn print_competitive_lobbies(&self) {
+        for entry in self.competitive_queue_map.iter() {
+            println!("Region {:?}", entry.key());
+            for lobby in entry.value() {
+                println!("  Lobby: {:?}", lobby);
+            }
+        }
+    }
+
 
     /* MISCELLANEOUS FUNCTIONS */
 

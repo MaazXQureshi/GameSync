@@ -18,7 +18,7 @@ pub enum ServerEvent {
     LobbyCreated(LobbyID), // Lobby ID
     LobbyJoined(LobbyID), // Lobby ID
     LobbyDeleted(LobbyID), // Lobby ID
-    LobbyLeft(LobbyID), // Lobby ID
+    LobbyLeft(PlayerID, LobbyID), // Lobby ID
     LobbyInvited(LobbyID), // Lobby ID
     PublicLobbies(Vec<Lobby>),
     PlayerEdited(PlayerID), // Player ID
@@ -26,6 +26,9 @@ pub enum ServerEvent {
     LobbyQueued(LobbyID),
     MatchFound(Lobby), // Opponent lobby
     MatchNotFound,
+    QueueStopped(LobbyID),
+    LeftGame(LobbyID),
+    LobbyInfo(Lobby)
 }
 
 #[derive(Serialize, Deserialize)]
@@ -42,7 +45,10 @@ pub enum ClientEvent {
     EditPlayer(Player),
     MessageLobby(PlayerID, LobbyID, String), // Sender ID, Lobby ID, Message
     QueueLobby(PlayerID, LobbyID),
-    CheckMatch(PlayerID, LobbyID, usize),
+    CheckMatch(PlayerID, LobbyID, Option<usize>), // Sender ID, Lobby ID, Threshold
+    StopQueue(PlayerID, LobbyID),
+    LeaveGameAsLobby(PlayerID, LobbyID),
+    GetLobbyInfo(PlayerID, LobbyID),
 }
 
 pub struct Websocket {
@@ -142,11 +148,24 @@ impl Websocket {
             },
             ClientEvent::QueueLobby(player_id, lobby_id) => {
                 println!("QueueLobby => Player ID: {:?} LobbyID: {:?}", player_id, lobby_id);
-                // TODO: Implement QueueLobby. Check if lobby full, change lobby state to Queueing and add to match queue
+                self.queue_lobby(player_id, lobby_id)?;
             },
             ClientEvent::CheckMatch(player_id, lobby_id, threshold) => {
-                println!("CheckMatch => Player ID: {:?} LobbyID: {:?} Threshold {}", player_id, lobby_id, threshold);
-                // TODO: Implement CheckMatch. Check queue to see if match is found using threshold for average rating calculation
+                println!("CheckMatch => Player ID: {:?} LobbyID: {:?} Threshold {:?}", player_id, lobby_id, threshold);
+                let threshold = threshold.unwrap_or(0);
+                self.check_lobby(player_id, lobby_id, threshold)?;
+            },
+            ClientEvent::StopQueue(player_id, lobby_id) => {
+                println!("StopQueue => Player ID: {:?} LobbyID: {:?}", player_id, lobby_id);
+                self.stop_queue(player_id, lobby_id)?;
+            },
+            ClientEvent::LeaveGameAsLobby(player_id, lobby_id) => {
+                println!("LeaveGameAsLobby => Player ID: {:?} LobbyID: {:?}", player_id, lobby_id);
+                self.leave_game_as_lobby(player_id, lobby_id)?;
+            },
+            ClientEvent::GetLobbyInfo(player_id, lobby_id) => {
+                println!("GetLobbyInfo => Lobby ID: {:?}", lobby_id);
+                self.get_lobby_info(player_id, lobby_id)?;
             },
         }
 
@@ -218,7 +237,8 @@ impl Websocket {
                             params: lobby_params.clone(),
                             leader: player_info.0,
                             status: LobbyStatus::Idle,
-                            player_list: vec![player_info.0]
+                            player_list: vec![player_info.0],
+                            queue_threshold: 0
                         };    
                         self.data_store.create_lobby(lobby_params.region, lobby_id, lobby.clone());
                         self.data_store.create_region_lobby(lobby_id, lobby_params.region);
@@ -276,11 +296,14 @@ impl Websocket {
                 if player_id != lobby.leader.player_id {
                     return Err(GameSyncError::LobbyOwnerError)
                 }
+                if lobby.status != LobbyStatus::Idle {
+                    return Err(GameSyncError::LobbyDeleteError)
+                }
                 self.data_store.delete_lobby(region, lobby_id)?;
                 self.data_store.delete_region_lobby(lobby_id)?;
                 for player in lobby.player_list.iter() { // Remove all players in lobby and send notification
                     self.data_store.remove_player_lobby(player.player_id);
-                    self.send_to_client(&player.player_id.to_string(), ServerEvent::LobbyLeft(lobby_id))?;
+                    self.send_to_client(&player.player_id.to_string(), ServerEvent::LobbyLeft(player.player_id, lobby_id))?;
                     self.send_to_client(&player.player_id.to_string(), ServerEvent::LobbyDeleted(lobby_id))?;
                 }
             },
@@ -300,19 +323,42 @@ impl Websocket {
                 // Leader will be the last one to leave. If it isn't, lobby will be deleted regardless
                 match lobby.player_list.iter().find(|&p| p.player_id == player_id) { // If player is part of this lobby
                     Some(_) => {
+                        // Regardless of whether player is leader or part of lobby, if lobby is in queue, it will be removed
+                        // If lobby is queueing, remove from queue and make idle. If it is in-game, okay to leave -> will remove entire lobby. Can change logic to transfer leadership if really needed.
+                        let mut lobby_queueing: bool = false; 
+                        if lobby.status == LobbyStatus::Queueing {
+                            lobby.status = LobbyStatus::Idle;
+                            match lobby.params.mode {
+                                GameMode::Casual => {
+                                    self.data_store.remove_casual_lobby(region, lobby.lobby_id);
+                                },
+                                GameMode::Competitive => {
+                                    self.data_store.remove_competitive_lobby(region, lobby.lobby_id);
+                                }
+                            }
+                            lobby_queueing = true;
+                        }
+
+                        // If lobby was In-game or Idle, continue as normal
                         if player_id == lobby.leader.player_id {
                             self.data_store.delete_lobby(region, lobby_id)?;
                             self.data_store.delete_region_lobby(lobby_id)?;
                             for player in lobby.player_list.iter() { // Remove all players in lobby and send notification
                                 self.data_store.remove_player_lobby(player.player_id);
-                                self.send_to_client(&player.player_id.to_string(), ServerEvent::LobbyLeft(lobby_id))?;
+                                self.send_to_client(&player.player_id.to_string(), ServerEvent::LobbyLeft(player.player_id, lobby_id))?;
                                 self.send_to_client(&player.player_id.to_string(), ServerEvent::LobbyDeleted(lobby_id))?;
                             }
                         } else {
                             lobby.player_list.retain(|&player| player.player_id != player_id); // Remove player
-                            self.data_store.edit_lobby(region, lobby_id, lobby)?;
-                            self.data_store.remove_player_lobby(player_id);
-                            self.send_to_client(&player_id.to_string(), ServerEvent::LobbyLeft(lobby_id))?;
+                            self.data_store.edit_lobby(region, lobby_id, lobby.clone())?; // Edit lobby
+                            self.data_store.remove_player_lobby(player_id); // Remove the leaving user
+                            self.send_to_client(&player_id.to_string(), ServerEvent::LobbyLeft(player_id, lobby_id))?; // Notify the leaving user
+                            for player in lobby.player_list.iter() { // Notify all remaining players in lobby
+                                if lobby_queueing {
+                                    self.send_to_client(&player.player_id.to_string(), ServerEvent::QueueStopped(lobby_id))?;
+                                }
+                                self.send_to_client(&player.player_id.to_string(), ServerEvent::LobbyLeft(player_id, lobby_id))?; // Notify that this particular player has left 
+                            }
                         }
                     },
                     None => return Err(GameSyncError::LobbyInviteError)
@@ -387,13 +433,27 @@ impl Websocket {
                 Some(player_info) => {
                     match player_info.1 { 
                         Some(mut lobby) => { // If user is part of a lobby, need to delete if owner, leave if in party
+                            // If the lobby was queuing then remove from queues and message players
+                            let mut lobby_queueing: bool = false; 
+                            if lobby.status == LobbyStatus::Queueing {
+                                lobby.status = LobbyStatus::Idle;
+                                match lobby.params.mode {
+                                    GameMode::Casual => {
+                                        self.data_store.remove_casual_lobby(lobby.params.region, lobby.lobby_id);
+                                    },
+                                    GameMode::Competitive => {
+                                        self.data_store.remove_competitive_lobby(lobby.params.region, lobby.lobby_id);
+                                    }
+                                }
+                                lobby_queueing = true;
+                            }
                             if player_id == lobby.leader.player_id { // If user is leader of a lobby, delete and kick party
                                 self.data_store.delete_lobby(lobby.params.region, lobby.lobby_id)?;
                                 self.data_store.delete_region_lobby(lobby.lobby_id)?;
                                 for player in lobby.player_list.iter() { // Remove all players from lobby and send messages to all connected users
                                     if player.player_id != player_id { 
                                         self.data_store.remove_player_lobby(player.player_id);
-                                        self.send_to_client(&player.player_id.to_string(), ServerEvent::LobbyLeft(lobby.lobby_id))?;
+                                        self.send_to_client(&player.player_id.to_string(), ServerEvent::LobbyLeft(player.player_id, lobby.lobby_id))?;
                                         self.send_to_client(&player.player_id.to_string(), ServerEvent::LobbyDeleted(lobby.lobby_id))?;
                                     }
                                 }
@@ -401,8 +461,15 @@ impl Websocket {
                             } 
                             else { // If user is part of a lobby (i.e. not a leader)
                                 lobby.player_list.retain(|&player| player.player_id != player_id); // Remove player
-                                self.data_store.edit_lobby(lobby.params.region, lobby.lobby_id, lobby)?;
-                                self.data_store.remove_player_lobby(player_id);
+                                self.data_store.edit_lobby(lobby.params.region, lobby.lobby_id, lobby.clone())?; // Edit lobby
+                                self.data_store.remove_player_lobby(player_id); // Remove the leaving user
+                                for player in lobby.player_list.iter() { // Notify all remaining players in lobby
+                                    if lobby_queueing {
+                                        self.send_to_client(&player.player_id.to_string(), ServerEvent::QueueStopped(lobby.lobby_id))?;
+                                    }
+                                    self.send_to_client(&player.player_id.to_string(), ServerEvent::LobbyLeft(player_id, lobby.lobby_id))?; // Notify that this particular player has left
+                                }
+                                self.data_store.delete_player(player_id); // Delete player at the end
                             }
                         },
                         None => { // If user not part of a lobby, can just remove from player map and return. Other data structures should ideally not have this player in them
@@ -419,4 +486,170 @@ impl Websocket {
         }
         Ok(())
     }
+
+    pub fn queue_lobby(&mut self, player_id: PlayerID, lobby_id: LobbyID) -> Result<(), GameSyncError> {
+        match self.data_store.get_region_lobby(&lobby_id) {
+            Some(region) => {
+                let mut lobby = self.data_store.get_lobby(region, lobby_id).unwrap(); // Guaranteed to return
+                if player_id != lobby.leader.player_id {
+                    return Err(GameSyncError::LobbyOwnerError)
+                }
+                if lobby.status != LobbyStatus::Idle {
+                    return Err(GameSyncError::LobbyQueueError)
+                }
+                if lobby.player_list.len() != self.data_store.lobby_size() {
+                    return Err(GameSyncError::LobbySizeError)
+                }
+
+                lobby.status = LobbyStatus::Queueing;
+
+                match lobby.params.mode {
+                    GameMode::Casual => {
+                        self.data_store.add_casual_lobby(region, lobby.clone());
+                    },
+                    GameMode::Competitive => {
+                        self.data_store.add_competitive_lobby(region, lobby.clone());
+                    }
+                }
+
+                for player in lobby.player_list.iter() { // Edit and Message all players in lobby
+                    self.data_store.edit_lobby(region, lobby_id, lobby.clone())?;
+                    self.data_store.edit_player(player.player_id, None, Some(lobby.clone()));
+                    self.send_to_client(&player.player_id.to_string(), ServerEvent::LobbyQueued(lobby_id))?;
+                }
+            },
+            None => return Err(GameSyncError::LobbyFindError)
+        }
+        Ok(())
+    }
+
+    pub fn check_lobby(&mut self, player_id: PlayerID, lobby_id: LobbyID, threshold: usize) -> Result<(), GameSyncError> {
+        match self.data_store.get_region_lobby(&lobby_id) {
+            Some(region) => {
+                let lobby = self.data_store.get_lobby(region, lobby_id).unwrap(); // Guaranteed to return
+                if player_id != lobby.leader.player_id { // Only let leader check to avoid multiple map operations
+                    return Err(GameSyncError::LobbyOwnerError)
+                }
+                if lobby.status != LobbyStatus::Queueing {
+                    return Err(GameSyncError::LobbyCheckError)
+                }
+
+                match lobby.params.mode {
+                    GameMode::Casual => {
+                        match self.data_store.check_casual_lobby(region, lobby_id) {
+                            Some(lobbies) => {
+                                self.finalize_match(region, lobbies, threshold)?;
+                            },
+                            None => {
+                                self.send_to_client(&player_id.to_string(), ServerEvent::MatchNotFound)?;
+                            }
+                        }
+                    },
+                    GameMode::Competitive => {
+                        match self.data_store.check_competitive_lobby(region, lobby_id, threshold) {
+                            Some(lobbies) => {
+                                self.finalize_match(region, lobbies, threshold)?;
+                            },
+                            None => {
+                                self.send_to_client(&player_id.to_string(), ServerEvent::MatchNotFound)?;
+                            }
+                        }
+                    }
+                }
+            },
+            None => return Err(GameSyncError::LobbyFindError)
+        }
+        Ok(())
+    }
+
+    fn finalize_match(&mut self, region: Region, lobbies: (Lobby, Lobby), threshold: usize) -> Result<(), GameSyncError> {
+        let (mut lobby1, mut lobby2) = lobbies;
+        lobby1.status = LobbyStatus::Ingame;
+        lobby1.queue_threshold = threshold;
+        for player in lobby1.player_list.iter() { // Edit and Message all players in lobby
+            self.data_store.edit_lobby(region, lobby1.lobby_id, lobby1.clone())?;
+            self.data_store.edit_player(player.player_id, None, Some(lobby1.clone()));
+            self.send_to_client(&player.player_id.to_string(), ServerEvent::MatchFound(lobby2.clone()))?; // Opponent lobby
+        }
+        lobby2.status = LobbyStatus::Ingame;
+        for player in lobby2.player_list.iter() { // Edit and Message all players in lobby
+            self.data_store.edit_lobby(region, lobby2.lobby_id, lobby2.clone())?;
+            self.data_store.edit_player(player.player_id, None, Some(lobby2.clone()));
+            self.send_to_client(&player.player_id.to_string(), ServerEvent::MatchFound(lobby1.clone()))?; // Opponent lobby
+        }
+        Ok(())
+    }
+
+    pub fn stop_queue(&mut self, player_id: PlayerID, lobby_id: LobbyID) -> Result<(), GameSyncError> {
+        match self.data_store.get_region_lobby(&lobby_id) {
+            Some(region) => {
+                let mut lobby = self.data_store.get_lobby(region, lobby_id).unwrap(); // Guaranteed to return
+                if player_id != lobby.leader.player_id {
+                    return Err(GameSyncError::LobbyOwnerError)
+                }
+                if lobby.status != LobbyStatus::Queueing {
+                    return Err(GameSyncError::LobbyStopError)
+                }
+
+                lobby.status = LobbyStatus::Idle;
+
+                match lobby.params.mode {
+                    GameMode::Casual => {
+                        self.data_store.remove_casual_lobby(region, lobby_id);
+                    },
+                    GameMode::Competitive => {
+                        self.data_store.remove_competitive_lobby(region, lobby_id);
+                    }
+                }
+
+                for player in lobby.player_list.iter() { // Edit and Message all players in lobby
+                    self.data_store.edit_lobby(region, lobby_id, lobby.clone())?;
+                    self.data_store.edit_player(player.player_id, None, Some(lobby.clone()));
+                    self.send_to_client(&player.player_id.to_string(), ServerEvent::QueueStopped(lobby_id))?;
+                }
+            },
+            None => return Err(GameSyncError::LobbyFindError)
+        }
+        Ok(())
+    }
+
+    pub fn leave_game_as_lobby(&mut self, player_id: PlayerID, lobby_id: LobbyID) -> Result<(), GameSyncError> {
+        match self.data_store.get_region_lobby(&lobby_id) {
+            Some(region) => {
+                let mut lobby = self.data_store.get_lobby(region, lobby_id).unwrap(); // Guaranteed to return
+                if player_id != lobby.leader.player_id { // Only lobby leader is allowed to leave game for the entire lobby
+                    return Err(GameSyncError::LobbyOwnerError)
+                }
+                if lobby.status != LobbyStatus::Ingame {
+                    return Err(GameSyncError::LeaveGameError)
+                }
+                
+                lobby.status = LobbyStatus::Idle;
+
+                for player in lobby.player_list.iter() { // Edit and Message all players in lobby
+                    self.data_store.edit_lobby(region, lobby_id, lobby.clone())?;
+                    self.data_store.edit_player(player.player_id, None, Some(lobby.clone()));
+                    self.send_to_client(&player.player_id.to_string(), ServerEvent::LeftGame(lobby_id))?;
+                }
+            },
+            None => return Err(GameSyncError::LobbyFindError)
+        }
+        // self.data_store.print_global_lobby_map(); // Uncomment for debugging
+        let event = ServerEvent::LobbyDeleted(lobby_id);
+        self.send_to_client(&player_id.to_string(), event)?;
+        Ok(())
+    }
+
+    pub fn get_lobby_info (&mut self, player_id: PlayerID, lobby_id: LobbyID) -> Result<(), GameSyncError> {
+        match self.data_store.get_region_lobby(&lobby_id) {
+            Some(region) => {
+                let lobby = self.data_store.get_lobby(region, lobby_id).unwrap(); // Guaranteed to return
+                let event = ServerEvent::LobbyInfo(lobby);
+                self.send_to_client(&player_id.to_string(), event)?;
+            },
+            None => return Err(GameSyncError::LobbyFindError)
+        }
+        Ok(())
+    }
+
 }
