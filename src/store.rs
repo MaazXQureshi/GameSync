@@ -1,7 +1,7 @@
 use message_io::network::Endpoint;
 use strum::IntoEnumIterator;
 use uuid::Uuid;
-use crate::lobby::{Lobby, Player, Region, Visibility};
+use crate::lobby::{Lobby, Player, Region, Visibility, PlayerID, LobbyID};
 use crate::server_params::ServerParams;
 use dashmap::DashMap;
 use std::cmp::Ordering;
@@ -13,8 +13,8 @@ pub struct DataStore {
     user_endpoint_map: Arc<DashMap<Uuid, Endpoint>>,
     endpoint_user_map: Arc<DashMap<Endpoint, Uuid>>,
     global_lobby_map: Arc<DashMap<Region, Arc<DashMap<Uuid, Lobby>>>>,
-    region_lobby_map: Arc<DashMap<Uuid, Region>>,
-    player_map: Arc<DashMap<Uuid, (Player, Option<Lobby>)>>,
+    region_lobby_map: Arc<DashMap<LobbyID, Region>>,
+    player_map: Arc<DashMap<PlayerID, (Player, Option<LobbyID>)>>,
     competitive_queue_map: Arc<DashMap<Region, Vec<Lobby>>>,
     casual_queue_map: Arc<DashMap<Region, VecDeque<Lobby>>>,
     server_params: ServerParams,
@@ -34,7 +34,7 @@ impl DataStore {
             new_casual_queue_map.entry(region).or_insert_with(|| VecDeque::new());
         }
         let new_region_lobby_map: Arc<DashMap<Uuid, Region>> = Arc::new(DashMap::new());
-        let new_player_map: Arc<DashMap<Uuid, (Player, Option<Lobby>)>> = Arc::new(DashMap::new());
+        let new_player_map: Arc<DashMap<PlayerID, (Player, Option<LobbyID>)>> = Arc::new(DashMap::new());
 
 
         Self {
@@ -127,12 +127,12 @@ impl DataStore {
             match inner_map.get(&inner_key) {
                 Some(lobby) => Some(lobby.value().clone()),
                 _ => {
-                    println!("Inner key '{:?}' not found.", inner_key);
+                    // println!("Inner key '{:?}' not found.", inner_key);
                     None
                 }
             }
         } else {
-            println!("Outer key '{:?}' not found.", outer_key);
+            // println!("Outer key '{:?}' not found.", outer_key);
             None
         }
     }
@@ -180,7 +180,7 @@ impl DataStore {
         self.player_map.insert(player_id, (player, None));
     }
 
-    pub fn edit_player(&self, player_id: Uuid, player: Option<Player>, lobby: Option<Lobby>) {
+    pub fn edit_player(&self, player_id: Uuid, player: Option<Player>, lobby_id: Option<LobbyID>) {
         self.player_map.entry(player_id)
         .and_modify(|tuple| {
             match player {
@@ -189,9 +189,9 @@ impl DataStore {
                 },
                 None => ()
             }
-            match lobby {
-                Some(lobby) => {
-                    tuple.1 = Some(lobby)
+            match lobby_id {
+                Some(lobby_id) => {
+                    tuple.1 = Some(lobby_id)
                 },
                 None => ()
             }
@@ -205,7 +205,7 @@ impl DataStore {
         });
     }
 
-    pub fn get_player_info(&self, player_id: Uuid) -> Option<(Player, Option<Lobby>)> {
+    pub fn get_player_info(&self, player_id: Uuid) -> Option<(Player, Option<LobbyID>)> {
         match self.player_map.get(&player_id) {
             Some(entry) => Some(entry.value().clone()),
             _ => None
@@ -286,9 +286,9 @@ impl DataStore {
     // Lobby vector is ordered by average rating
     pub fn add_competitive_lobby(&mut self, region: Region, lobby: Lobby) {
         if let Some(mut lobbies) = self.competitive_queue_map.get_mut(&region) {
-            let avg_rating = lobby.average_rating();
+            let avg_rating = self.get_lobby_average_rating(region, lobby.lobby_id);
             let position = lobbies
-                .binary_search_by(|l| l.average_rating().partial_cmp(&avg_rating).unwrap_or(Ordering::Equal))
+                .binary_search_by(|l| self.get_lobby_average_rating(region, l.lobby_id).partial_cmp(&avg_rating).unwrap_or(Ordering::Equal))
                 .unwrap_or_else(|e| e);
             lobbies.insert(position, lobby);
         }
@@ -307,13 +307,13 @@ impl DataStore {
             let target_index = lobbies.iter().position(|lobby| lobby.lobby_id == lobby_id)?;
 
             let lobby1 = lobbies[target_index].clone();
-            let avg_rating1 = lobby1.average_rating();
+            let avg_rating1 = self.get_lobby_average_rating(region, lobby1.lobby_id);
             let range_min = avg_rating1 - threshold;
             let range_max = avg_rating1 + threshold;
 
             let lower_bound = lobbies
                 .binary_search_by(|l| {
-                    if l.average_rating() < range_min {
+                    if self.get_lobby_average_rating(region, l.lobby_id) < range_min {
                         Ordering::Less
                     } else {
                         Ordering::Greater
@@ -323,7 +323,7 @@ impl DataStore {
 
             let upper_bound = lobbies
                 .binary_search_by(|l| {
-                    if l.average_rating() > range_max {
+                    if self.get_lobby_average_rating(region, l.lobby_id) > range_max {
                         Ordering::Greater
                     } else {
                         Ordering::Less
@@ -337,7 +337,7 @@ impl DataStore {
                 }
 
                 let lobby2 = &lobbies[i];
-                let avg_rating2 = lobby2.average_rating();
+                let avg_rating2 = self.get_lobby_average_rating(region, lobby2.lobby_id);
                 let range_min2 = avg_rating2 - lobby2.queue_threshold;
                 let range_max2 = avg_rating2 + lobby2.queue_threshold;
 
@@ -349,6 +349,27 @@ impl DataStore {
             }
         }
         None  // This could either mean match not found or match was already found before (hence removed from queue). Client's responsibility for stop searching once MatchFound is received OR do a check for if lobby is already InGame state
+    }
+
+    pub fn get_lobby_average_rating(&self, region: Region, lobby_id: Uuid) -> usize {
+        if let Some(lobby) = self.get_lobby(region, lobby_id) {
+            if lobby.player_list.len() != 0 {
+                return lobby.player_list.iter().map(|player_id| {
+                    match self.get_player_info(player_id.clone()) {
+                        Some(player) => {
+                            player.0.rating
+                        },
+                        None => {
+                            0
+                        }
+                    }
+                }).sum::<usize>() / lobby.player_list.len();
+            } 
+            else {
+                return 0
+            }
+        }
+        0 // Lobby not found. Should not happen -> error checking done prior to this
     }
 
     pub fn remove_competitive_lobby(&mut self, region: Region, lobby_id: Uuid) {

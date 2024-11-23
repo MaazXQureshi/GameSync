@@ -2,24 +2,17 @@ use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
 use uuid::Uuid;
 
+pub type PlayerID = Uuid;
+pub type LobbyID = Uuid;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lobby {
     pub(crate) lobby_id: Uuid,
     pub params: LobbyParams,
-    pub leader: Player,
+    pub leader: PlayerID,
     pub status: LobbyStatus,
-    pub player_list: Vec<Player>,
+    pub player_list: Vec<PlayerID>,
     pub queue_threshold: usize
-}
-
-impl Lobby {
-    pub fn average_rating(&self) -> usize {
-        if self.player_list.len() != 0 {
-            self.player_list.iter().map(|player| player.rating).sum::<usize>() / self.player_list.len()
-        } else {
-            0
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
