@@ -1,45 +1,54 @@
 use crate::error::GameSyncError::ParseError;
 use crate::error::{print_error, GameSyncError};
+use crate::lobby::{LobbyParams, Player, Region};
+use crate::server_events::ServerEvent;
+use crate::store::{LobbyID, PlayerID};
 use message_io::network::{Endpoint, NetEvent, SendStatus, Transport};
 use message_io::node::{self, NodeEvent, NodeHandler, NodeTask};
 use serde::{Deserialize, Serialize};
-
 // Sync these with server-side enum
-#[derive(Serialize, Deserialize)]
-pub enum ServerEvent {
-    Connected(), // existing event, not needed on server-side
-    UserMessage(String),
-    SelfPlayer(String),
-    NewPlayer(String),
-}
 
 #[derive(Serialize, Deserialize)]
+// make these methods async to wait for server event of client-initiated requests
 pub enum ClientEvent {
     Broadcast(String),
     SendTo(String, String),
-    // more game events to send
+    CreateLobby(PlayerID, LobbyParams), // async wait for LobbyCreated
+    JoinLobby(PlayerID, LobbyID), // event wait for LobbyJoined
+    DeleteLobby(PlayerID, LobbyID), // event wait for LobbyDeleted
+    LeaveLobby(PlayerID, LobbyID), // async wait for LobbyLeft
+    InviteLobby(PlayerID, LobbyID, PlayerID),  // Sender ID, Lobby ID, Invitee ID
+    GetPublicLobbies(PlayerID, Region),
+    EditPlayer(Player),
+    MessageLobby(PlayerID, LobbyID, String), // Sender ID, Lobby ID, Message
+    QueueLobby(PlayerID, LobbyID),
+    CheckMatch(PlayerID, LobbyID, Option<usize>), // Sender ID, Lobby ID, Threshold
+    StopQueue(PlayerID, LobbyID),
+    LeaveGameAsLobby(PlayerID, LobbyID),
+    GetLobbyInfo(PlayerID, LobbyID),
 }
 
+#[derive(Clone)]
 pub struct Websocket {
     handler: NodeHandler<ServerEvent>,
     server: Endpoint,
-    node_task: Option<NodeTask>,
+    // node_task: Option<NodeTask>,
 }
 
 impl Websocket {
-    pub fn new(url: &str, send_event: impl Fn(ServerEvent) + Send + 'static) -> Result<Self, GameSyncError> {
+    pub fn new(url: &str, send_event: impl Fn(ServerEvent) + Send + 'static) -> Result<(Self, NodeTask), GameSyncError> {
         let (handler, listener) = node::split();
         let (server, _) = handler.network().connect(Transport::Ws, url)?;
 
-        let mut websocket = Self { handler: handler.clone(), server, node_task: None };
+        let websocket = Self { handler: handler.clone(), server };
         let mut connection = ServerConnection::new(handler);
 
         let node_task = listener.for_each_async(move |event| {
             connection.handle_messages(event, |event| send_event(event));
         });
 
-        websocket.node_task = Some(node_task);
-        Ok(websocket)
+        // websocket.node_task = Some(node_task);
+        Ok((websocket, node_task))
     }
 
     pub fn send_event(&mut self, event: ClientEvent) -> Result<SendStatus, GameSyncError> {
@@ -78,16 +87,56 @@ impl ServerConnection {
             NodeEvent::Signal(msg) => {
                 // TODO: implement callbacks here
                 match msg {
-                    ServerEvent::UserMessage(message) => {
-                        send_event(ServerEvent::UserMessage(message));
+                    ServerEvent::UserMessage(from, message) => {
+                        send_event(ServerEvent::UserMessage(from, message));
                     }
                     ServerEvent::SelfPlayer(data) => {
-                        println!("My id: {:?}", data);
                         send_event(ServerEvent::SelfPlayer(data));
                     }
                     ServerEvent::NewPlayer(data) => {
-                        println!("New player {:?} joined!", data);
                         send_event(ServerEvent::NewPlayer(data));
+                    }
+                    ServerEvent::LobbyCreated(id) => {
+                        send_event(ServerEvent::LobbyCreated(id));
+                    }
+                    ServerEvent::LobbyJoined(id) => {
+                        send_event(ServerEvent::LobbyJoined(id));
+                    }
+                    ServerEvent::LobbyDeleted(id) => {
+                        send_event(ServerEvent::LobbyDeleted(id));
+                    }
+                    ServerEvent::LobbyLeft(player_id, lobby_id) => {
+                        send_event(ServerEvent::LobbyLeft(player_id, lobby_id));
+                    }
+                    ServerEvent::LobbyInvited(id) => {
+                        send_event(ServerEvent::LobbyInvited(id));
+                    }
+                    ServerEvent::PublicLobbies(lobbies) => {
+                        send_event(ServerEvent::PublicLobbies(lobbies));
+                    }
+                    ServerEvent::PlayerEdited(id) => {
+                        send_event(ServerEvent::PlayerEdited(id));
+                    }
+                    ServerEvent::LobbyMessage(msg) => {
+                        send_event(ServerEvent::LobbyMessage(msg));
+                    }
+                    ServerEvent::LobbyQueued(id) => {
+                        send_event(ServerEvent::LobbyQueued(id));
+                    }
+                    ServerEvent::MatchFound(lobby) => {
+                        send_event(ServerEvent::MatchFound(lobby));
+                    }
+                    ServerEvent::MatchNotFound => {
+                        send_event(ServerEvent::MatchNotFound);
+                    }
+                    ServerEvent::QueueStopped(id) => {
+                        send_event(ServerEvent::QueueStopped(id));
+                    }
+                    ServerEvent::LeftGame(lobbies) => {
+                        send_event(ServerEvent::LeftGame(lobbies));
+                    }
+                    ServerEvent::LobbyInfo(id) => {
+                        send_event(ServerEvent::LobbyInfo(id));
                     }
                     _ => {}
                 }
@@ -95,3 +144,4 @@ impl ServerConnection {
         }
     }
 }
+

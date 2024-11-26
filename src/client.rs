@@ -1,5 +1,7 @@
 use crate::error::GameSyncError;
-use crate::networking::{ClientEvent, ServerEvent, Websocket};
+use crate::error::GameSyncError::LockError;
+use crate::networking::{ClientEvent, Websocket};
+use crate::server_events::ServerEvent;
 use crate::store::Store;
 use message_io::network::SendStatus;
 use std::sync::{Arc, Mutex};
@@ -7,10 +9,16 @@ use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
 
+
+#[derive(Clone)]
 pub struct GameSyncClient {
     // Underlying websocket connection and state management
-    websocket: Websocket,
-    store: Arc<Mutex<Store>>,
+    pub(crate) websocket: Websocket,
+    pub(crate) store: Arc<Mutex<Store>>,
+}
+
+pub trait MessageHandler {
+    fn handle_message(&mut self, message: ServerEvent);
 }
 
 impl GameSyncClient {
@@ -23,13 +31,14 @@ impl GameSyncClient {
                 store_locked.on_event(event);
             }
         };
-        let websocket = Websocket::new(url, event_handler)?;
+        let (websocket, node_task) = Websocket::new(url, event_handler)?;
 
         loop {
             let store = store.lock();
             match store {
-                Ok(store) => {
+                Ok(mut store) => {
                     if store.is_connected != false {
+                        store.node_task = Some(node_task);
                         break;
                     }
                 }
@@ -41,6 +50,22 @@ impl GameSyncClient {
 
         let client = Self { websocket, store };
         Ok(client)
+    }
+
+    pub fn register_callback<F>(&mut self, callback: F) -> Result<(), GameSyncError>
+    where
+        F: MessageHandler + Send + 'static,
+    {
+        // self.callbacks.lock().unwrap().insert(event.to_string(), Box::new(callback));
+        let store = self.store.lock();
+        match store {
+            Ok(mut store) => {
+                store.callbacks = Some(Box::new(callback));
+            }
+            Err(_) => { return Err(LockError) }
+        }
+
+        Ok(())
     }
 
     pub fn send_to_all_clients(&mut self, message: String) -> Result<SendStatus, GameSyncError> {
@@ -55,14 +80,6 @@ impl GameSyncClient {
         let store = self.store.lock();
         match store {
             Ok(store) => { Ok(store.get_player_id()) }
-            Err(_) => { Err(GameSyncError::LockError) }
-        }
-    }
-
-    pub fn get_players(&self) -> Result<Vec<Uuid>, GameSyncError> {
-        let store = self.store.lock();
-        match store {
-            Ok(store) => { Ok(store.get_players()) }
             Err(_) => { Err(GameSyncError::LockError) }
         }
     }
