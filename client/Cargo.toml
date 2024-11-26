@@ -4,10 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
-tokio-tungstenite = "0.15"
-tungstenite = "0.17"
-futures = "0.3"
-futures-util = "0.3.31"
-url = "2.5.2"
 gamesync_client = {path = "../../gamesync_client"}
+uuid = "1.11.0"
+tokio = {version= "1.41", features = ["full"] }
+tokio-tungstenite = "0.24.0"
+tungstenite = "0.24.0"
+serde_json = "1.0.132"
+colored = "2.1.0"
+serde = { version = "1.0.210", features = ["derive"] }
