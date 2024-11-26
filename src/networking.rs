@@ -1,3 +1,5 @@
+use std::thread;
+use std::time::Duration;
 use crate::server_params::ServerParams;
 use crate::store::DataStore;
 use message_io::network::{Endpoint, NetEvent, SendStatus, Transport};
@@ -7,12 +9,12 @@ use uuid::Uuid;
 use crate::error::{GameSyncError, print_error};
 use crate::lobby::{*};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum ServerEvent {
-    UserMessage(String),
+    UserMessage(PlayerID, String), // From, Msg
     SelfPlayer(String),
     NewPlayer(String),
-    LobbyCreated(LobbyID), // Lobby ID
+    LobbyCreated(Lobby), // Lobby
     LobbyJoined(LobbyID), // Lobby ID
     LobbyDeleted(LobbyID), // Lobby ID
     LobbyLeft(PlayerID, LobbyID), // Lobby ID
@@ -28,7 +30,7 @@ pub enum ServerEvent {
     LobbyInfo(Lobby)
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum ClientEvent {
     Broadcast(String),
     SendTo(String, String), // To, Msg
@@ -73,9 +75,13 @@ impl Websocket {
                             Err(e) => print_error(e),
                         }
                     }
-                    NetEvent::Message(_, message) => {
-                        let payload = serde_json::from_slice(&message).unwrap();
-                        self.handler.signals().send(payload);
+                    NetEvent::Message(endpoint, message) => {
+                        let msg = serde_json::from_slice(&message).unwrap();
+
+                        match self.handle_messages(endpoint, msg) {
+                            Ok(_) => {},
+                            Err(e) => print_error(e),
+                        }
                     }
                     NetEvent::Disconnected(endpoint) => {
                         println!("User {} disconnected", self.data_store.get_user(endpoint).unwrap());
@@ -88,27 +94,26 @@ impl Websocket {
                         self.data_store.remove_user_endpoint(endpoint); // Do this at the end
                         println!("Cleaned up datastructures");
                     }
-                }
-                NodeEvent::Signal(msg) => {
-                    match self.handle_messages(msg) {
-                        Ok(_) => {},
-                        Err(e) => print_error(e),
-                    }
-                }
+                },
+                _ => {}
             }
         );
     }
 
-    fn handle_messages(&mut self, event: ClientEvent) -> Result<(), GameSyncError> {
+    fn handle_messages(&mut self, endpoint: Endpoint, event: ClientEvent) -> Result<(), GameSyncError> {
+        let user = match self.data_store.get_user(endpoint) {
+            Some(mut user) => user,
+            None => return Err(GameSyncError::UserNotFound)
+        };
         match event {
             ClientEvent::Broadcast(message) => {
                 println!("Broadcasting message: {}", message);
-                let event = ServerEvent::UserMessage(message);
-                self.send_to_all_clients(event)?;
+                let event = ServerEvent::UserMessage(user, message);
+                self.send_to_all_clients(endpoint, event)?;
             }
             ClientEvent::SendTo(uuid, message) => {
                 println!("To: {} Message: {}", uuid, message);
-                let event = ServerEvent::UserMessage(message);
+                let event = ServerEvent::UserMessage(user, message);
                 self.send_to_client(&uuid, event)?;
             }
             ClientEvent::CreateLobby(player_id, lobby_params) => {
@@ -176,9 +181,10 @@ impl Websocket {
         let event = ServerEvent::SelfPlayer(id.clone());
         self.send_to_client(&id, event)?;
 
-        // send new player id to all existing clients
+        // send new player id to all existing clients (wait a bit for client to get set up before receiving events)
+        thread::sleep(Duration::from_millis(100));
         let event = ServerEvent::NewPlayer(id.to_string());
-        self.send_to_all_clients(event)?;
+        self.send_to_all_clients(endpoint, event)?;
 
         // Default player
         let player_id = Uuid::parse_str(&id)?;
@@ -206,11 +212,14 @@ impl Websocket {
         Ok(())
     }
 
-    pub fn send_to_all_clients(&mut self, event: ServerEvent) -> Result<SendStatus, GameSyncError> {
+    pub fn send_to_all_clients(&mut self, msg_sender: Endpoint, event: ServerEvent) -> Result<SendStatus, GameSyncError> {
         let endpoints = self.data_store.get_all_user_endpoints();
         let payload = serde_json::to_string(&event)?;
 
         for endpoint in endpoints {
+            if (msg_sender == endpoint) {
+                continue;
+            }
             let status = self.handler.network().send(endpoint, payload.as_ref());
             if status != SendStatus::Sent {
                 return Err(GameSyncError::SendError)
@@ -235,12 +244,12 @@ impl Websocket {
                     status: LobbyStatus::Idle,
                     player_list: vec![player_id],
                     queue_threshold: 0
-                };    
+                };
                 self.data_store.create_lobby(lobby_params.region, lobby_id, lobby.clone());
                 self.data_store.create_region_lobby(lobby_id, lobby_params.region);
                 self.data_store.edit_player(player_id, None, Some(lobby_id.clone()));
                 // self.data_store.print_global_lobby_map(); // Uncomment for debugging
-                let event = ServerEvent::LobbyCreated(lobby_id);
+                let event = ServerEvent::LobbyCreated(lobby);
                 self.send_to_client(&player_id.to_string(), event)?;
             }
         }
@@ -299,7 +308,7 @@ impl Websocket {
             Some(_) => {
                 // Regardless of whether player is leader or part of lobby, if lobby is in queue, it will be removed
                 // If lobby is queueing, remove from queue and make idle.
-                let mut lobby_queueing: bool = false; 
+                let mut lobby_queueing: bool = false;
                 if lobby.status == LobbyStatus::Queueing {
                     lobby.status = LobbyStatus::Idle;
                     match lobby.params.mode {
@@ -322,7 +331,7 @@ impl Websocket {
                         self.send_to_client(&player_id_lobby.to_string(), ServerEvent::LobbyLeft(player_id_lobby.clone(), lobby_id))?;
                         self.send_to_client(&player_id_lobby.to_string(), ServerEvent::LobbyDeleted(lobby_id))?;
                     }
-                } 
+                }
                 else {
                     lobby.player_list.retain(|&player| player != player_id); // Remove player
                     self.data_store.edit_lobby(region, lobby_id, lobby.clone())?; // Edit lobby
@@ -332,12 +341,12 @@ impl Websocket {
                         if lobby_queueing {
                             self.send_to_client(&player_id_lobby.to_string(), ServerEvent::QueueStopped(lobby_id))?;
                         }
-                        self.send_to_client(&player_id_lobby.to_string(), ServerEvent::LobbyLeft(player_id, lobby_id))?; // Notify that this particular player has left 
+                        self.send_to_client(&player_id_lobby.to_string(), ServerEvent::LobbyLeft(player_id, lobby_id))?; // Notify that this particular player has left
                     }
                 }
             },
             None => return Err(GameSyncError::LobbyInviteError)
-        } 
+        }
         // self.data_store.print_global_lobby_map(); // Uncomment for debugging
         Ok(())
     }
@@ -348,7 +357,7 @@ impl Websocket {
             Some(player_lobby) => {
                 if lobby_id != player_lobby {
                     return Err(GameSyncError::LobbyMessageError)
-                } 
+                }
                 else {
                     let region = self.find_region_lobby(lobby_id)?;
                     let lobby = self.find_lobby(region, lobby_id)?;
@@ -410,12 +419,12 @@ impl Websocket {
         let player_id = self.data_store.get_user(endpoint);
         if let Some(player_id) = player_id {
             let player_info = self.find_player(player_id)?;
-            match player_info.1 { 
+            match player_info.1 {
                 Some(player_lobby) => { // If user is part of a lobby, need to delete if owner, leave if in party
                     // If the lobby was queuing then remove from queues and message players
                     let region = self.find_region_lobby(player_lobby)?;
                     let mut lobby = self.find_lobby(region, player_lobby)?;
-                    let mut lobby_queueing: bool = false; 
+                    let mut lobby_queueing: bool = false;
                     if lobby.status == LobbyStatus::Queueing {
                         lobby.status = LobbyStatus::Idle;
                         match lobby.params.mode {
@@ -432,14 +441,14 @@ impl Websocket {
                         self.data_store.delete_lobby(lobby.params.region, lobby.lobby_id)?;
                         self.data_store.delete_region_lobby(lobby.lobby_id)?;
                         for player_id_lobby in lobby.player_list.iter() { // Remove all players from lobby and send messages to all connected users
-                            if *player_id_lobby != player_id { 
+                            if *player_id_lobby != player_id {
                                 self.data_store.remove_player_lobby(player_id_lobby.clone());
                                 self.send_to_client(&player_id_lobby.to_string(), ServerEvent::LobbyLeft(player_id_lobby.clone(), lobby.lobby_id))?;
                                 self.send_to_client(&player_id_lobby.to_string(), ServerEvent::LobbyDeleted(lobby.lobby_id))?;
                             }
                         }
                         self.data_store.delete_player(player_id); // Delete player at the end
-                    } 
+                    }
                     else { // If user is part of a lobby (i.e. not a leader)
                         lobby.player_list.retain(|&player| player != player_id); // Remove player
                         self.data_store.edit_lobby(lobby.params.region, lobby.lobby_id, lobby.clone())?; // Edit lobby
@@ -457,7 +466,7 @@ impl Websocket {
                     self.data_store.delete_player(player_id)
                 }
             }
-        } 
+        }
         else {
             println!("Player not found in clean-up. This should ideally never happen. If this happens, some datastructure operations have gone wrong, particularly endpoint_user_map");
         }
@@ -584,7 +593,7 @@ impl Websocket {
         if lobby.status != LobbyStatus::Ingame {
             return Err(GameSyncError::LeaveGameError)
         }
-        
+
         lobby.status = LobbyStatus::Idle;
 
         for player_id_lobby in lobby.player_list.iter() { // Edit and Message all players in lobby
