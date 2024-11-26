@@ -9,6 +9,7 @@ use actix::AsyncContext;
 use gamesync_server::server::GameServer;
 use gamesync_server::server_params::ServerParams;
 
+
 // ChatRoom actor that manages connected sessions and broadcasts messages
 struct ChatRoom {
     sessions: Arc<Mutex<HashSet<Addr<WsSession>>>>,
@@ -138,10 +139,7 @@ async fn ws_handler(
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // let chat_room = ChatRoom::new().start();
-    let mut params = ServerParams {
-      player_count: 100
-    };
-    let mut server = GameServer::new("8080", params).unwrap();
+    let mut server = GameServer::new("8080", ServerParams { player_count: 5 }).unwrap();
     server.process_messages();
     Ok(())
 
