@@ -7,7 +7,7 @@ pub type LobbyID = Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lobby {
-    pub(crate) lobby_id: Uuid,
+    pub lobby_id: Uuid,
     pub params: LobbyParams,
     pub leader: PlayerID,
     pub status: LobbyStatus,
@@ -17,7 +17,7 @@ pub struct Lobby {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LobbyParams {
-    name: String,
+    pub name: String,
 	pub visibility: Visibility,
     pub region: Region,
     pub mode: GameMode

@@ -15,7 +15,7 @@ pub enum ServerEvent {
     SelfPlayer(String),
     NewPlayer(String),
     LobbyCreated(Lobby), // Lobby
-    LobbyJoined(LobbyID), // Lobby ID
+    LobbyJoined(PlayerID, LobbyID), // Lobby ID
     LobbyDeleted(LobbyID), // Lobby ID
     LobbyLeft(PlayerID, LobbyID), // Lobby ID
     LobbyInvited(LobbyID), // Lobby ID
@@ -35,19 +35,19 @@ pub enum ClientEvent {
     Broadcast(String),
     SendTo(String, String), // To, Msg
     // more game events to send b/w clients and server
-    CreateLobby(PlayerID, LobbyParams),
-    JoinLobby(PlayerID, LobbyID),
-    DeleteLobby(PlayerID, LobbyID),
-    LeaveLobby(PlayerID, LobbyID),
-    InviteLobby(PlayerID, LobbyID, PlayerID),  // Sender ID, Lobby ID, Invitee ID
-    GetPublicLobbies(PlayerID, Region),
+    CreateLobby(LobbyParams),
+    JoinLobby(LobbyID),
+    DeleteLobby(LobbyID),
+    LeaveLobby(LobbyID),
+    InviteLobby(LobbyID, PlayerID),  // Sender ID, Lobby ID, Invitee ID
+    GetPublicLobbies(Region),
     EditPlayer(Player),
-    MessageLobby(PlayerID, LobbyID, String), // Sender ID, Lobby ID, Message
-    QueueLobby(PlayerID, LobbyID),
-    CheckMatch(PlayerID, LobbyID, Option<usize>), // Sender ID, Lobby ID, Threshold
-    StopQueue(PlayerID, LobbyID),
-    LeaveGameAsLobby(PlayerID, LobbyID),
-    GetLobbyInfo(PlayerID, LobbyID),
+    MessageLobby(LobbyID, String), // Sender ID, Lobby ID, Message
+    QueueLobby(LobbyID),
+    CheckMatch(LobbyID, Option<usize>), // Sender ID, Lobby ID, Threshold
+    StopQueue(LobbyID),
+    LeaveGameAsLobby(LobbyID),
+    GetLobbyInfo(LobbyID),
 }
 
 pub struct Websocket {
@@ -101,42 +101,42 @@ impl Websocket {
     }
 
     fn handle_messages(&mut self, endpoint: Endpoint, event: ClientEvent) -> Result<(), GameSyncError> {
-        let user = match self.data_store.get_user(endpoint) {
-            Some(mut user) => user,
+        let player_id = match self.data_store.get_user(endpoint) {
+            Some(user) => user,
             None => return Err(GameSyncError::UserNotFound)
         };
         match event {
             ClientEvent::Broadcast(message) => {
                 println!("Broadcasting message: {}", message);
-                let event = ServerEvent::UserMessage(user, message);
+                let event = ServerEvent::UserMessage(player_id, message);
                 self.send_to_all_clients(endpoint, event)?;
             }
             ClientEvent::SendTo(uuid, message) => {
                 println!("To: {} Message: {}", uuid, message);
-                let event = ServerEvent::UserMessage(user, message);
+                let event = ServerEvent::UserMessage(player_id, message);
                 self.send_to_client(&uuid, event)?;
             }
-            ClientEvent::CreateLobby(player_id, lobby_params) => {
+            ClientEvent::CreateLobby(lobby_params) => {
                 println!("CreateLobby => Player ID: {:?} LobbyParams: {:?}", player_id, lobby_params);
                 self.create_lobby(player_id, &lobby_params)?;
             },
-            ClientEvent::JoinLobby(player_id, lobby_id) => {
+            ClientEvent::JoinLobby(lobby_id) => {
                 println!("JoinLobby => Player ID: {:?} LobbyID: {:?}", player_id, lobby_id);
                 self.join_lobby(player_id, lobby_id)?;
             },
-            ClientEvent::DeleteLobby(player_id, lobby_id) => {
+            ClientEvent::DeleteLobby(lobby_id) => {
                 println!("DeleteLobby => Player ID: {:?} LobbyID: {:?}", player_id, lobby_id);
                 self.delete_lobby(player_id, lobby_id)?;
             },
-            ClientEvent::LeaveLobby(player_id, lobby_id) => {
+            ClientEvent::LeaveLobby(lobby_id) => {
                 println!("LeaveLobby => Player ID: {:?} LobbyID: {:?}", player_id, lobby_id);
                 self.leave_lobby(player_id, lobby_id)?;
             },
-            ClientEvent::InviteLobby(player_id, lobby_id, invitee_id) => {
+            ClientEvent::InviteLobby(lobby_id, invitee_id) => {
                 println!("InviteLobby => Player ID: {:?} LobbyID: {:?} InviteeID: {:?}", player_id, lobby_id, invitee_id);
                 self.invite_lobby(player_id, lobby_id, invitee_id)?;
             },
-            ClientEvent::GetPublicLobbies(player_id, region) => {
+            ClientEvent::GetPublicLobbies(region) => {
                 println!("GetPublicLobbies => Player ID: {:?} Region: {:?}", player_id, region);
                 self.get_public_lobbies(player_id, region)?;
             },
@@ -144,28 +144,28 @@ impl Websocket {
                 println!("EditPlayer => Player: {:?}", player);
                 self.edit_player(player)?;
             },
-            ClientEvent::MessageLobby(player_id, lobby_id, message) => {
+            ClientEvent::MessageLobby(lobby_id, message) => {
                 println!("MessageLobby => Player ID: {:?} LobbyID: {:?} Message: {}", player_id, lobby_id, message);
                 self.message_lobby(player_id, lobby_id, message)?;
             },
-            ClientEvent::QueueLobby(player_id, lobby_id) => {
+            ClientEvent::QueueLobby(lobby_id) => {
                 println!("QueueLobby => Player ID: {:?} LobbyID: {:?}", player_id, lobby_id);
                 self.queue_lobby(player_id, lobby_id)?;
             },
-            ClientEvent::CheckMatch(player_id, lobby_id, threshold) => {
+            ClientEvent::CheckMatch(lobby_id, threshold) => {
                 println!("CheckMatch => Player ID: {:?} LobbyID: {:?} Threshold {:?}", player_id, lobby_id, threshold);
                 let threshold = threshold.unwrap_or(0);
-                self.check_lobby(player_id, lobby_id, threshold)?;
+                self.check_match(player_id, lobby_id, threshold)?;
             },
-            ClientEvent::StopQueue(player_id, lobby_id) => {
+            ClientEvent::StopQueue(lobby_id) => {
                 println!("StopQueue => Player ID: {:?} LobbyID: {:?}", player_id, lobby_id);
                 self.stop_queue(player_id, lobby_id)?;
             },
-            ClientEvent::LeaveGameAsLobby(player_id, lobby_id) => {
+            ClientEvent::LeaveGameAsLobby(lobby_id) => {
                 println!("LeaveGameAsLobby => Player ID: {:?} LobbyID: {:?}", player_id, lobby_id);
                 self.leave_game_as_lobby(player_id, lobby_id)?;
             },
-            ClientEvent::GetLobbyInfo(player_id, lobby_id) => {
+            ClientEvent::GetLobbyInfo(lobby_id) => {
                 println!("GetLobbyInfo => Lobby ID: {:?}", lobby_id);
                 self.get_lobby_info(player_id, lobby_id)?;
             },
@@ -272,7 +272,7 @@ impl Websocket {
                 self.data_store.edit_lobby(region, lobby_id, lobby.clone())?;
                 self.data_store.edit_player(player_id, None, Some(lobby_id.clone()));
                 for player_id_lobby in lobby.player_list.iter() { // Send join notification to all players in lobby
-                    self.send_to_client(&player_id_lobby.to_string(), ServerEvent::LobbyJoined(lobby_id))?;
+                    self.send_to_client(&player_id_lobby.to_string(), ServerEvent::LobbyJoined(player_id, lobby_id))?;
                 }
             }
         }
@@ -505,7 +505,7 @@ impl Websocket {
         Ok(())
     }
 
-    pub fn check_lobby(&mut self, player_id: PlayerID, lobby_id: LobbyID, threshold: usize) -> Result<(), GameSyncError> {
+    pub fn check_match(&mut self, player_id: PlayerID, lobby_id: LobbyID, threshold: usize) -> Result<(), GameSyncError> {
         let region = self.find_region_lobby(lobby_id)?;
         let lobby = self.find_lobby(region, lobby_id)?;
         if player_id != lobby.leader { // Only let leader check to avoid multiple map operations
@@ -514,6 +514,8 @@ impl Websocket {
         if lobby.status != LobbyStatus::Queueing {
             return Err(GameSyncError::LobbyCheckError)
         }
+
+        self.data_store.print_casual_lobbies();
 
         match lobby.params.mode {
             GameMode::Casual => {
@@ -542,6 +544,7 @@ impl Websocket {
 
     fn finalize_match(&mut self, region: Region, lobbies: (Lobby, Lobby), threshold: usize) -> Result<(), GameSyncError> {
         let (mut lobby1, mut lobby2) = lobbies;
+        println!("Match found between lobby {} and {}", lobby1.lobby_id, lobby2.lobby_id);
         lobby1.status = LobbyStatus::Ingame;
         lobby1.queue_threshold = threshold;
         for player_id_lobby in lobby1.player_list.iter() { // Edit and Message all players in lobby
