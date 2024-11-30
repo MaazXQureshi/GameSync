@@ -6,6 +6,7 @@ use gamesync_client::lobby::{GameMode, Lobby, LobbyParams, Player, Region, Visib
 use gamesync_client::server_events::ServerEvent;
 use uuid::Uuid;
 use tokio::task;
+use std::str::FromStr;
 
 #[derive(Clone)]
 pub struct MyMessageHandler {
@@ -32,8 +33,25 @@ impl MessageHandler for MyMessageHandler {
             ServerEvent::LobbyDeleted(id) => {
                 println!("Lobby {id} successfully deleted");
             },
-            ServerEvent::LobbyJoined(id) => {
-                println!("New player joined in lobby {id}");
+            ServerEvent::LobbyJoined(player_id, lobby_id) => {
+                println!("New player {player_id} has joined lobby {lobby_id}");
+            },
+            ServerEvent::LobbyQueued(lobby_id) => {
+                println!("Lobby {lobby_id} has been queued");
+            },
+            ServerEvent::PublicLobbies(lobbies) => {
+                println!("All public lobbies: ");
+                println!("{:?}", lobbies);
+            },
+            ServerEvent::MatchFound(lobby) => {
+                println!("Match was found for lobby: ");
+                println!("{:?}", lobby);
+            },
+            ServerEvent::MatchNotFound => {
+                println!("No match was found");
+            },
+            ServerEvent::LobbyInfo(lobby) => {
+                println!("Lobby info: {:?}", lobby);
             },
             // Handle other message types
             _ => {}
@@ -45,8 +63,18 @@ impl MyMessageHandler {
     pub fn add_player(&mut self, id: String) {
         self.players.push(id);
     }
+}
 
-
+fn parse_region(input: &str) -> Result<Region, String> {
+    match input.to_uppercase().as_str() {
+        "NA" => Ok(Region::NA),
+        "EU" => Ok(Region::EU),
+        "SA" => Ok(Region::SA),
+        "MEA" => Ok(Region::MEA),
+        "AS" => Ok(Region::AS),
+        "AU" => Ok(Region::AU),
+        _ => Err(format!("'{}' is not a valid Region", input)),
+    }
 }
 
 #[tokio::main]
@@ -75,7 +103,7 @@ async fn main() {
         mode: GameMode::Casual
     };
 
-    let result = client.create_lobby(id, lobby_params);
+    let result = client.create_lobby(lobby_params);
 
     thread::spawn(move || {
         let stdin = io::stdin();
@@ -88,9 +116,15 @@ async fn main() {
             let result = match parts.as_slice() {
                 ["broadcast", msg] => Ok(client.send_to_all_clients(msg.to_string()).expect("Failed to broadcast")),
                 ["sendto", recipient, msg] => Ok(client.send_to(Uuid::parse_str(recipient).unwrap(), msg.to_string()).expect("Failed to send message")),
-                ["create_lobby", player_id, lobby_params] => Ok(client.create_lobby(Uuid::parse_str(player_id).unwrap(), serde_json::from_str::<LobbyParams>(lobby_params).unwrap()).expect("Failed to send message")),
-                ["join_lobby", player_id, lobby_id] => Ok(client.join_lobby(Uuid::parse_str(player_id).unwrap(), Uuid::parse_str(lobby_id).unwrap()).expect("Failed to send message")),
-                ["delete_lobby", player_id, lobby_id] => Ok(client.delete_lobby(Uuid::parse_str(player_id).unwrap(), Uuid::parse_str(lobby_id).unwrap()).expect("Failed to send message")),
+                ["create_lobby", lobby_params] => Ok(client.create_lobby(serde_json::from_str::<LobbyParams>(lobby_params).unwrap()).expect("Failed to send message")),
+                ["join_lobby", lobby_id] => Ok(client.join_lobby(Uuid::parse_str(lobby_id).unwrap()).expect("Failed to send message")),
+                ["delete_lobby", lobby_id] => Ok(client.delete_lobby(Uuid::parse_str(lobby_id).unwrap()).expect("Failed to send message")),
+                ["queue_lobby", lobby_id] => Ok(client.queue_lobby(Uuid::parse_str(lobby_id).unwrap()).expect("Failed to send message")),
+                ["check_match", lobby_id, threshold] => Ok(client.check_match(Uuid::parse_str(lobby_id).unwrap(), Some(threshold.parse::<usize>().unwrap())).expect("Failed to send message")),
+                ["edit_player", rating] => Ok(client.edit_player(Player { player_id: id, rating: rating.parse::<usize>().unwrap() }).expect("Failed to send message")),
+                ["get_public_lobbies", region] => Ok(client.get_public_lobbies(parse_region(&region).unwrap()).expect("Failed to send message")),
+                ["get_lobby_info", lobby_id] => Ok(client.get_lobby_info(Uuid::parse_str(lobby_id).unwrap()).expect("Failed to send message")),
+
                 // Add similar entries for the other events
                 _ => Err(format!("Unknown command: {}", input)),
             };
