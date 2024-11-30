@@ -5,6 +5,8 @@ use crate::store::{LobbyID, PlayerID};
 use message_io::network::SendStatus;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use std::str::FromStr;
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lobby {
@@ -61,81 +63,81 @@ pub enum LobbyStatus {
 }
 
 impl GameSyncClient {
-    pub fn create_lobby(&mut self, player_id: PlayerID, params: LobbyParams) -> Result<SendStatus, GameSyncError>
+    pub fn create_lobby(&mut self, params: LobbyParams) -> Result<SendStatus, GameSyncError>
     {
-        let result = self.websocket.send_event(ClientEvent::CreateLobby(player_id, params))?;
+        let result = self.websocket.send_event(ClientEvent::CreateLobby(params))?;
         Ok(result)
     }
 
-    pub fn join_lobby(&mut self, player_id: PlayerID, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
+    pub fn join_lobby(&mut self, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
     {
-        let result = self.websocket.send_event(ClientEvent::JoinLobby(player_id, lobby_id))?;
+        let result = self.websocket.send_event(ClientEvent::JoinLobby(lobby_id))?;
         Ok(result)
     }
 
-    pub fn delete_lobby(&mut self, player_id: PlayerID, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
+    pub fn delete_lobby(&mut self, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
     {
-        let result = self.websocket.send_event(ClientEvent::DeleteLobby(player_id, lobby_id))?;
+        let result = self.websocket.send_event(ClientEvent::DeleteLobby(lobby_id))?;
         Ok(result)
     }
 
-    pub fn leave_lobby(&mut self, player_id: PlayerID, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
+    pub fn leave_lobby(&mut self, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
     {
-        let result = self.websocket.send_event(ClientEvent::LeaveLobby(player_id, lobby_id))?;
+        let result = self.websocket.send_event(ClientEvent::LeaveLobby(lobby_id))?;
         Ok(result)
     }
 
-    pub fn invite_lobby(&mut self, player_id: PlayerID, lobby_id: LobbyID, invitee: PlayerID) -> Result<SendStatus, GameSyncError>
+    pub fn invite_lobby(&mut self, lobby_id: LobbyID, invitee: PlayerID) -> Result<SendStatus, GameSyncError>
     {
-        let result = self.websocket.send_event(ClientEvent::InviteLobby(player_id, lobby_id, invitee))?;
+        let result = self.websocket.send_event(ClientEvent::InviteLobby(lobby_id, invitee))?;
         Ok(result)
     }
 
-    pub fn get_public_lobbies(&mut self, player_id: PlayerID, region: Region) -> Result<SendStatus, GameSyncError>
+    pub fn get_public_lobbies(&mut self, region: Region) -> Result<SendStatus, GameSyncError>
     {
-        let result = self.websocket.send_event(ClientEvent::GetPublicLobbies(player_id, region))?;
+        let result = self.websocket.send_event(ClientEvent::GetPublicLobbies(region))?;
         Ok(result)
     }
 
-    pub fn edit_player(&mut self, player_id: Player) -> Result<SendStatus, GameSyncError>
+    pub fn edit_player(&mut self, player: Player) -> Result<SendStatus, GameSyncError>
     {
-        let result = self.websocket.send_event(ClientEvent::EditPlayer(player_id))?;
+        let result = self.websocket.send_event(ClientEvent::EditPlayer(player))?;
         Ok(result)
     }
 
-    pub fn message_lobby(&mut self, player_id: PlayerID, lobby_id: LobbyID, message: String) -> Result<SendStatus, GameSyncError>
+    pub fn message_lobby(&mut self, lobby_id: LobbyID, message: String) -> Result<SendStatus, GameSyncError>
     {
-        let result = self.websocket.send_event(ClientEvent::MessageLobby(player_id, lobby_id, message))?;
+        let result = self.websocket.send_event(ClientEvent::MessageLobby(lobby_id, message))?;
         Ok(result)
     }
 
-    pub fn queue_lobby(&mut self, player_id: PlayerID, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
+    pub fn queue_lobby(&mut self, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
     {
-        let result = self.websocket.send_event(ClientEvent::QueueLobby(player_id, lobby_id))?;
+        let result = self.websocket.send_event(ClientEvent::QueueLobby(lobby_id))?;
         Ok(result)
     }
 
-    pub fn check_match(&mut self, player_id: PlayerID, lobby_id: LobbyID, threshold: Option<usize>) -> Result<SendStatus, GameSyncError>
+    pub fn check_match(&mut self, lobby_id: LobbyID, threshold: Option<usize>) -> Result<SendStatus, GameSyncError>
     {
-        let result = self.websocket.send_event(ClientEvent::CheckMatch(player_id, lobby_id, threshold))?;
+        let result = self.websocket.send_event(ClientEvent::CheckMatch(lobby_id, threshold))?;
         Ok(result)
     }
 
-    pub fn stop_queue(&mut self, player_id: PlayerID, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
+    pub fn stop_queue(&mut self, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
     {
-        let result = self.websocket.send_event(ClientEvent::StopQueue(player_id, lobby_id))?;
+        let result = self.websocket.send_event(ClientEvent::StopQueue(lobby_id))?;
         Ok(result)
     }
 
-    pub fn leave_game_asy_lobby(&mut self, player_id: PlayerID, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
+    pub fn leave_game_asy_lobby(&mut self, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
     {
-        let result = self.websocket.send_event(ClientEvent::LeaveGameAsLobby(player_id, lobby_id))?;
+        let result = self.websocket.send_event(ClientEvent::LeaveGameAsLobby(lobby_id))?;
         Ok(result)
     }
 
-    pub fn get_lobby_info(&mut self, player_id: PlayerID, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
+    pub fn get_lobby_info(&mut self, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
     {
-        let result = self.websocket.send_event(ClientEvent::GetLobbyInfo(player_id, lobby_id))?;
+        let result = self.websocket.send_event(ClientEvent::GetLobbyInfo(lobby_id))?;
         Ok(result)
     }
 }

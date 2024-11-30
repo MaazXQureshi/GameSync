@@ -11,7 +11,7 @@ pub enum ServerEvent {
     SelfPlayer(String),
     NewPlayer(String),
     LobbyCreated(Lobby), // Lobby
-    LobbyJoined(LobbyID), // Lobby ID
+    LobbyJoined(PlayerID, LobbyID), // Lobby ID
     LobbyDeleted(LobbyID), // Lobby ID
     LobbyLeft(PlayerID, LobbyID), // Lobby ID
     LobbyInvited(LobbyID), // Lobby ID

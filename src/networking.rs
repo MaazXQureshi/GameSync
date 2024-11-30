@@ -13,19 +13,19 @@ use serde::{Deserialize, Serialize};
 pub enum ClientEvent {
     Broadcast(String),
     SendTo(String, String),
-    CreateLobby(PlayerID, LobbyParams), // async wait for LobbyCreated
-    JoinLobby(PlayerID, LobbyID), // event wait for LobbyJoined
-    DeleteLobby(PlayerID, LobbyID), // event wait for LobbyDeleted
-    LeaveLobby(PlayerID, LobbyID), // async wait for LobbyLeft
-    InviteLobby(PlayerID, LobbyID, PlayerID),  // Sender ID, Lobby ID, Invitee ID
-    GetPublicLobbies(PlayerID, Region),
+    CreateLobby(LobbyParams), // async wait for LobbyCreated
+    JoinLobby(LobbyID), // event wait for LobbyJoined
+    DeleteLobby(LobbyID), // event wait for LobbyDeleted
+    LeaveLobby(LobbyID), // async wait for LobbyLeft
+    InviteLobby(LobbyID, PlayerID),  // Sender ID, Lobby ID, Invitee ID
+    GetPublicLobbies(Region),
     EditPlayer(Player),
-    MessageLobby(PlayerID, LobbyID, String), // Sender ID, Lobby ID, Message
-    QueueLobby(PlayerID, LobbyID),
-    CheckMatch(PlayerID, LobbyID, Option<usize>), // Sender ID, Lobby ID, Threshold
-    StopQueue(PlayerID, LobbyID),
-    LeaveGameAsLobby(PlayerID, LobbyID),
-    GetLobbyInfo(PlayerID, LobbyID),
+    MessageLobby(LobbyID, String), // Sender ID, Lobby ID, Message
+    QueueLobby(LobbyID),
+    CheckMatch(LobbyID, Option<usize>), // Sender ID, Lobby ID, Threshold
+    StopQueue(LobbyID),
+    LeaveGameAsLobby(LobbyID),
+    GetLobbyInfo(LobbyID),
 }
 
 #[derive(Clone)]
@@ -99,8 +99,8 @@ impl ServerConnection {
                     ServerEvent::LobbyCreated(id) => {
                         send_event(ServerEvent::LobbyCreated(id));
                     }
-                    ServerEvent::LobbyJoined(id) => {
-                        send_event(ServerEvent::LobbyJoined(id));
+                    ServerEvent::LobbyJoined(player_id, lobby_id) => {
+                        send_event(ServerEvent::LobbyJoined(player_id, lobby_id));
                     }
                     ServerEvent::LobbyDeleted(id) => {
                         send_event(ServerEvent::LobbyDeleted(id));
