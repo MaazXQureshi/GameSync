@@ -132,7 +132,7 @@ async fn main() {
 
     let start_ping_thread = |mut client: GameSyncClient, lobby_id: Uuid, threshold: Arc<AtomicUsize>| {
         thread::spawn(move || {
-            thread::sleep(Duration::from_secs(2));
+            thread::sleep(Duration::from_secs(2)); // To give time for the server to return a successful MatchQueued
             while QUEUE_ACTIVE.load(Ordering::SeqCst) {
                 thread::sleep(Duration::from_secs(10));
                 let current_threshold = threshold.load(Ordering::SeqCst);
