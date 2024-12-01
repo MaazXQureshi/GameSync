@@ -267,6 +267,14 @@ async fn main() {
                         (_, Err(_)) => println!("Invalid threshold {threshold}")
                     }
                 },
+                ["update_threshold", threshold] => { // Local command, only to update threshold for queueing loop thread
+                    match threshold.parse::<usize>() {
+                        Ok(threshold) => {
+                            queue_threshold.store(threshold, Ordering::SeqCst);
+                        },
+                        Err(_) => println!("Invalid threshold: {}", threshold),
+                    }
+                },
                 ["edit_player", rating] => {
                     match rating.parse::<usize>() {
                         Ok(rating) => {
