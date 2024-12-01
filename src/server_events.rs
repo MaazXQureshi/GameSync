@@ -17,7 +17,7 @@ pub enum ServerEvent {
     LobbyInvited(LobbyID), // Lobby ID
     PublicLobbies(Vec<Lobby>),
     PlayerEdited(PlayerID), // Player IDConnected(),
-    LobbyMessage(String), // Msg
+    LobbyMessage(PlayerID, String), // Msg
     LobbyQueued(LobbyID),
     MatchFound(Lobby), // Opponent lobby
     MatchNotFound,

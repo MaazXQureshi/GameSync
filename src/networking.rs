@@ -117,8 +117,8 @@ impl ServerConnection {
                     ServerEvent::PlayerEdited(id) => {
                         send_event(ServerEvent::PlayerEdited(id));
                     }
-                    ServerEvent::LobbyMessage(msg) => {
-                        send_event(ServerEvent::LobbyMessage(msg));
+                    ServerEvent::LobbyMessage(player_id, msg) => {
+                        send_event(ServerEvent::LobbyMessage(player_id, msg));
                     }
                     ServerEvent::LobbyQueued(id) => {
                         send_event(ServerEvent::LobbyQueued(id));

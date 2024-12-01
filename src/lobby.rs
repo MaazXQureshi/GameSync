@@ -10,7 +10,7 @@ use std::str::FromStr;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lobby {
-    pub(crate) lobby_id: Uuid,
+    pub lobby_id: Uuid,
     pub params: LobbyParams,
     pub leader: PlayerID,
     pub status: LobbyStatus,
@@ -129,7 +129,7 @@ impl GameSyncClient {
         Ok(result)
     }
 
-    pub fn leave_game_asy_lobby(&mut self, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
+    pub fn leave_game_as_lobby(&mut self, lobby_id: LobbyID) -> Result<SendStatus, GameSyncError>
     {
         let result = self.websocket.send_event(ClientEvent::LeaveGameAsLobby(lobby_id))?;
         Ok(result)
