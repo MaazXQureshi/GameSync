@@ -55,7 +55,7 @@ impl fmt::Display for GameSyncError {
             GameSyncError::SocketError(err) => write!(f, "Socket error: {}.", err),
             GameSyncError::SendError => write!(f, "Failed to send socket event"),
             GameSyncError::UuidError(err) => write!(f, "Failed to parse uuid: {}", err),
-            GameSyncError::LobbyFindError => write!(f, "User not found."),
+            GameSyncError::LobbyFindError => write!(f, "Lobby not found."),
             GameSyncError::UserNotFound => write!(f, "Failed to find lobby"),
             GameSyncError::LobbyCreateError => write!(f, "Failed to create lobby. Player already part of a lobby"),
             GameSyncError::LobbyJoinError => write!(f, "Failed to join lobby. Player already part of a lobby"),

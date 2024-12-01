@@ -308,7 +308,8 @@ impl DataStore {
 
             let lobby1 = lobbies[target_index].clone();
             let avg_rating1 = self.get_lobby_average_rating(region, lobby1.lobby_id);
-            let range_min = avg_rating1 - threshold;
+            let threshold_mod = if threshold >= avg_rating1 { avg_rating1 } else { threshold };
+            let range_min = avg_rating1 - threshold_mod;
             let range_max = avg_rating1 + threshold;
 
             let lower_bound = lobbies

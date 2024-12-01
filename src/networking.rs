@@ -21,7 +21,7 @@ pub enum ServerEvent {
     LobbyInvited(LobbyID), // Lobby ID
     PublicLobbies(Vec<Lobby>),
     PlayerEdited(PlayerID), // Player ID
-    LobbyMessage(String), // Msg
+    LobbyMessage(PlayerID, String), // From, Msg
     LobbyQueued(LobbyID),
     MatchFound(Lobby), // Opponent lobby
     MatchNotFound,
@@ -362,7 +362,7 @@ impl Websocket {
                     let region = self.find_region_lobby(lobby_id)?;
                     let lobby = self.find_lobby(region, lobby_id)?;
                     for player_id_lobby in lobby.player_list.iter() { // Send message to all players in lobby
-                        self.send_to_client(&player_id_lobby.to_string(), ServerEvent::LobbyMessage(message.clone()))?; // Can leave as clone for now. Optionally figure out better way
+                        self.send_to_client(&player_id_lobby.to_string(), ServerEvent::LobbyMessage(player_id, message.clone()))?; // Can leave as clone for now. Optionally figure out better way
                     }
                 }
             },
@@ -515,7 +515,7 @@ impl Websocket {
             return Err(GameSyncError::LobbyCheckError)
         }
 
-        self.data_store.print_casual_lobbies();
+        // self.data_store.print_casual_lobbies();
 
         match lobby.params.mode {
             GameMode::Casual => {
