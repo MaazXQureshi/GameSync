@@ -507,7 +507,7 @@ impl Websocket {
 
     pub fn check_match(&mut self, player_id: PlayerID, lobby_id: LobbyID, threshold: usize) -> Result<(), GameSyncError> {
         let region = self.find_region_lobby(lobby_id)?;
-        let lobby = self.find_lobby(region, lobby_id)?;
+        let mut lobby = self.find_lobby(region, lobby_id)?;
         if player_id != lobby.leader { // Only let leader check to avoid multiple map operations
             return Err(GameSyncError::LobbyOwnerError)
         }
@@ -516,6 +516,8 @@ impl Websocket {
         }
 
         // self.data_store.print_casual_lobbies();
+        lobby.queue_threshold = threshold;
+        self.data_store.edit_lobby(region, lobby_id, lobby.clone())?;
 
         match lobby.params.mode {
             GameMode::Casual => {

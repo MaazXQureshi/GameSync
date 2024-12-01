@@ -307,10 +307,10 @@ impl DataStore {
             let target_index = lobbies.iter().position(|lobby| lobby.lobby_id == lobby_id)?;
 
             let lobby1 = lobbies[target_index].clone();
-            let avg_rating1 = self.get_lobby_average_rating(region, lobby1.lobby_id);
+            let avg_rating1 = self.get_lobby_average_rating(region, lobby1.lobby_id); // 1000
             let threshold_mod = if threshold >= avg_rating1 { avg_rating1 } else { threshold };
-            let range_min = avg_rating1 - threshold_mod;
-            let range_max = avg_rating1 + threshold;
+            let range_min = avg_rating1 - threshold_mod; // 0
+            let range_max = avg_rating1 + threshold; // 3000
 
             let lower_bound = lobbies
                 .binary_search_by(|l| {
@@ -338,13 +338,20 @@ impl DataStore {
                 }
 
                 let lobby2 = &lobbies[i];
-                let avg_rating2 = self.get_lobby_average_rating(region, lobby2.lobby_id);
-                let range_min2 = avg_rating2 - lobby2.queue_threshold;
-                let range_max2 = avg_rating2 + lobby2.queue_threshold;
-
-                if range_min <= range_max2 && range_min2 <= range_max {
+                let lobby2 = self.get_lobby(lobby2.params.region, lobby2.lobby_id).unwrap();
+                let avg_rating2 = self.get_lobby_average_rating(region, lobby2.lobby_id); // 3000
+                let lobby2_threshold_mod = if lobby2.queue_threshold >= avg_rating2 { avg_rating2 } else { lobby2.queue_threshold };
+                let range_min2 = avg_rating2 - lobby2_threshold_mod; // 3000
+                let range_max2 = avg_rating2 + lobby2.queue_threshold; // 3000
+                // 0 < 3000 // 3000 < 3000
+                println!("Range min2 {}, Range max2 {}, Lobby1AvgRating {}", range_min2, range_max2, avg_rating1);
+                if range_min2 <= avg_rating1 && avg_rating1 <= range_max2 {
                     let matched_lobby2 = lobbies.remove(i);
-                    let matched_lobby1 = lobbies.remove(target_index);
+                    let matched_lobby1 = if i < target_index {
+                        lobbies.remove(target_index - 1)
+                    } else {
+                        lobbies.remove(target_index)
+                    };
                     return Some((matched_lobby1.clone(), matched_lobby2.clone()));
                 }
             }
