@@ -1,6 +1,6 @@
 [package]
 name = "gamesync_server"
-version = "0.1.0"
+version = "0.1.2"
 authors = ["Maaz Qureshi", "Elly Wong"]
 description = "Server-side multiplayer game networking library"
 license = "MIT OR Apache-2.0"
