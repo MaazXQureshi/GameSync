@@ -5,7 +5,6 @@ use crate::store::{LobbyID, PlayerID};
 use message_io::network::SendStatus;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use std::str::FromStr;
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
