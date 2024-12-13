@@ -95,6 +95,7 @@ impl DataStore {
         inner_map.clone().insert(inner_key, inner_value);
     }
 
+    #[allow(dead_code)]
     pub fn print_global_lobby_map(&self) {
         for outer_entry in self.global_lobby_map.iter() {
             println!("Region: {:?}", outer_entry.key());
@@ -169,6 +170,7 @@ impl DataStore {
         }
     }
 
+    #[allow(dead_code)]
     pub fn print_region_lobby_map(&self) {
         for entry in self.region_lobby_map.iter() {
             println!("Lobby_ID {:?} Region {:?}", entry.key(), entry.value());
@@ -216,6 +218,7 @@ impl DataStore {
         self.player_map.remove(&player_id);
     }
 
+    #[allow(dead_code)]
     pub fn print_player_map(&self) {
         for entry in self.player_map.iter() {
             println!("Player {:?} Lobby {:?}", entry.value().clone().0, entry.value().clone().1);
@@ -231,6 +234,7 @@ impl DataStore {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_casual_lobbies(&self, region: Region) -> Option<VecDeque<Lobby>> {
         self.casual_queue_map.get(&region).map(|lobbies| lobbies.clone())
     }
@@ -273,6 +277,7 @@ impl DataStore {
         }
     }
 
+    #[allow(dead_code)]
     pub fn print_casual_lobbies(&self) {
         for entry in self.casual_queue_map.iter() {
             println!("Region {:?}", entry.key());
@@ -294,6 +299,7 @@ impl DataStore {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_competitive_lobbies(&self, region: Region) -> Option<Vec<Lobby>> {
         self.competitive_queue_map.get(&region).map(|lobbies| lobbies.clone())
     }
@@ -388,6 +394,7 @@ impl DataStore {
         }
     }
 
+    #[allow(dead_code)]
     pub fn print_competitive_lobbies(&self) {
         for entry in self.competitive_queue_map.iter() {
             println!("Region {:?}", entry.key());

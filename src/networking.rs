@@ -217,7 +217,7 @@ impl Websocket {
         let payload = serde_json::to_string(&event)?;
 
         for endpoint in endpoints {
-            if (msg_sender == endpoint) {
+            if msg_sender == endpoint {
                 continue;
             }
             let status = self.handler.network().send(endpoint, payload.as_ref());
