@@ -1,4 +1,4 @@
-use std::io::{self, BufRead};
+use std::io::{self};
 use std::io::Write;
 use std::sync::atomic::AtomicUsize;
 use std::thread;
@@ -11,9 +11,6 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use std::time::Duration;
-
-use tokio::task;
-use std::str::FromStr;
 
 static QUEUE_ACTIVE: AtomicBool = AtomicBool::new(false);
 
@@ -114,21 +111,7 @@ async fn main() {
 
     let id = client.get_self().unwrap();
     println!("Client ID: {id}");
-    // let queue_active = Arc::new(AtomicBool::new(false));
-    // let queue_active_clone = queue_active.clone();
     let queue_threshold = Arc::new(AtomicUsize::new(0));
-
-    // let msg = String::from("Hi everyone! I am ") + id.to_string().as_str();
-    // client.send_to_all_clients(msg).unwrap();
-
-    // let lobby_params = LobbyParams{
-    //     name: String::from("lobby1"),
-    //     visibility: Visibility::Public,
-    //     region: Region::AU,
-    //     mode: GameMode::Casual
-    // };
-
-    // let result = client.create_lobby(lobby_params);
 
     let start_ping_thread = |mut client: GameSyncClient, lobby_id: Uuid, threshold: Arc<AtomicUsize>| {
         thread::spawn(move || {
@@ -137,13 +120,11 @@ async fn main() {
                 thread::sleep(Duration::from_secs(10));
                 let current_threshold = threshold.load(Ordering::SeqCst);
                 client.check_match(lobby_id, Some(current_threshold)).expect("Failed to send message");
-                // println!("Ping sent to server");
             }
-            // println!("Ping thread exiting...");
         })
     };
 
-    let mut ping_thread = start_ping_thread(client.clone(), id, queue_threshold.clone());
+    start_ping_thread(client.clone(), id, queue_threshold.clone());
 
     thread::spawn(move || {
         loop {
@@ -195,7 +176,7 @@ async fn main() {
                         Ok(lobby_id) => {
                             client.queue_lobby(lobby_id).expect("Failed to send message");
                             if !QUEUE_ACTIVE.load(Ordering::SeqCst) {
-                                ping_thread = start_ping_thread(client.clone(), lobby_id, queue_threshold.clone());
+                                start_ping_thread(client.clone(), lobby_id, queue_threshold.clone());
                             }
                         },
                         Err(_) => println!("Invalid UUID: {}", lobby_id),
@@ -330,11 +311,6 @@ async fn main() {
     loop {
         std::thread::park();
     }
-}
-
-fn print_lobby_state(lobby_state: Option<Lobby>) {
-    // Implement this function to display the updated lobby state.
-    println!("{:#?}", lobby_state);
 }
 
 fn get_user_input() -> String {

@@ -690,7 +690,9 @@ dependencies = [
 
 [[package]]
 name = "gamesync_client"
-version = "0.1.1"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b662a0b2bcfc445107f49ae9b03d85ad97ca248be1dc8a7dd93fa0c12885c5e5"
 dependencies = [
  "message-io",
  "serde",
@@ -700,7 +702,9 @@ dependencies = [
 
 [[package]]
 name = "gamesync_server"
-version = "0.1.0"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5221e3cbec64ce480a6c908174560ea24d58720cd086e4b14816db4b4c6ff4f"
 dependencies = [
  "dashmap",
  "message-io",
