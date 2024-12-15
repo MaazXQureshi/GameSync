@@ -16,7 +16,7 @@ static QUEUE_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone)]
 pub struct MyMessageHandler {
-    client: GameSyncClient,
+    // client: GameSyncClient,
     players: Vec<String>,
 }
 
@@ -26,8 +26,8 @@ impl MessageHandler for MyMessageHandler {
             ServerEvent::NewPlayer(id) => {
                 // println!("New player id: {}", id);
                 self.add_player(id.clone());
-                let msg = String::from("Welcome ") + &*id;
-                self.client.send_to(Uuid::parse_str(&*id).unwrap(), msg).unwrap();
+                // let msg = String::from("Welcome ") + &*id;
+                // self.client.send_to(Uuid::parse_str(&*id).unwrap(), msg).unwrap();
             },
             ServerEvent::UserMessage(id, msg) => {
                 // let message = format!("[{}]: {}",id,  msg);
@@ -103,7 +103,7 @@ async fn main() {
     let mut client = GameSyncClient::connect(server_url).unwrap();
 
     let handler = MyMessageHandler {
-        client: client.clone(),
+        // client: client.clone(),
         players: Vec::new()
     };
 
