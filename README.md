@@ -301,10 +301,12 @@ For more information on usage, see the example demo CLI under the **Reproducibil
 ## Reproducibility Guide
 ### Usage
 Add the GameSync client library to your Cargo.toml file on the client-side application
+
     [dependencies]
     gamesync_client = "0.1.3"
 
 Add the GameSync server library to your Cargo.toml file on the server-side application
+
     [dependencies]
     gamesync_server = "0.1.3"
 
