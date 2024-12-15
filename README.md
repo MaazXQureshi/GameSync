@@ -2,9 +2,9 @@
 #### A multiplayer game networking library
 
 ---
-###### Elly Wong 1006313954
+###### Elly Wong 1006313954 ellycn.wong@mail.utoronto.ca
 
-###### Maaz Qureshi 1006319761
+###### Maaz Qureshi 1006319761 maazx.qureshi@mail.utoronto.ca
 ---
 
 ## Motivation
@@ -412,3 +412,6 @@ Another lesson learned was that brainstorming and spending some time before begi
 The current state of the library covers the basic multiplayer communication needs, but there’s definitely room for further development and enhancements. Some potential future opportunities for this library include adding more flexibility for developers to integrate our library with their server-side game state management, supporting player state synchronisation, and exploring more Rust features to improve the library’s scalability and security.
 
 In conclusion, the team found the project to be an intellectually stimulating, unique and rewarding experience having only previously worked on projects in other languages such as C/C++, Python, JavaScript. It forced us to think in a different way than we are used to, and it overall improved productivity due to the way the codebase was organized, especially when compared to OOP. The team would also like to point out that dealing with concurrency was made much easier in Rust as all the errors were converted to compile time errors. While the team may have spent more time trying to compile the library, there was very little debugging time spent on runtime errors which made the entire process all the more productive. The team has learnt a lot of great programming and design practices designing an entire Rust crate, and hopes to continue developing in Rust in the future.
+
+## Video Demo
+[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/gYBVlbUnfMo/0.jpg)](https://www.youtube.com/watch?v=gYBVlbUnfMo)
