@@ -6,6 +6,10 @@
 
 ###### Maaz Qureshi 1006319761 maazx.qureshi@mail.utoronto.ca
 ---
+## Video Demo
+[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/gYBVlbUnfMo/0.jpg)](https://youtu.be/gYBVlbUnfMo)
+
+https://youtu.be/gYBVlbUnfMo
 
 ## Motivation
 Over the last decade, gaming has become more mainstream than ever due to the ease of access to technology and an overall increase in public awareness through successful franchises, advertisements, events, and conventions facilitated by gaming companies. In recent years there has been a subsequent rampant increase in multiplayer games due to the monetization benefits they offer and the larger player base they are able to reach. Consequently, there has been an increase in indie game developers working in small teams, or often alone, aiming to get into this stream by creating their own games from scratch. Many developers have therefore found themselves in need of building basic websocket interfaces and network infrastructure for their games from the ground up in order to implement features that are expected at the minimum in modern games, such as lobby systems and group chats. As games continue to increase in scope and complexity, developer time could be much better spent on more challenging tasks and pursuing creative avenues rather than on the reimplementation of basic networking features that are all but shared between most games nowadays.
@@ -412,6 +416,3 @@ Another lesson learned was that brainstorming and spending some time before begi
 The current state of the library covers the basic multiplayer communication needs, but there’s definitely room for further development and enhancements. Some potential future opportunities for this library include adding more flexibility for developers to integrate our library with their server-side game state management, supporting player state synchronisation, and exploring more Rust features to improve the library’s scalability and security.
 
 In conclusion, the team found the project to be an intellectually stimulating, unique and rewarding experience having only previously worked on projects in other languages such as C/C++, Python, JavaScript. It forced us to think in a different way than we are used to, and it overall improved productivity due to the way the codebase was organized, especially when compared to OOP. The team would also like to point out that dealing with concurrency was made much easier in Rust as all the errors were converted to compile time errors. While the team may have spent more time trying to compile the library, there was very little debugging time spent on runtime errors which made the entire process all the more productive. The team has learnt a lot of great programming and design practices designing an entire Rust crate, and hopes to continue developing in Rust in the future.
-
-## Video Demo
-[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/gYBVlbUnfMo/0.jpg)](https://www.youtube.com/watch?v=gYBVlbUnfMo)
