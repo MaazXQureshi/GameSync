@@ -320,23 +320,27 @@ Refer to our **Developer Guide** for the initialization and method interfaces.
 
 This section details how to build and run a comprehensive demo example which highlights the library usage. The demo involves running a server along with one or more clients. We would like to preface that our project focuses on creating a networking game library, and that user input parsing and related errors are left to be handled by the developer’s implementations since we intend to give as much flexibility as possible. The current implementation is only meant to highlight library usage and functionality, and is therefore not focused on catching errors not related to the library. Having said that, the demo does feature basic input parsing and error checking.
 
-The following steps involve running a simple game application with two game lobbies of size 2 each, queueing for a competitive match. 
+The following steps involve running a simple game application with two game lobbies of size 2 each, queueing for a competitive match. If the commands do not 
 
 To run the demo, execute the following commands in order:
 
     cd gamesync_demo 
     cargo build
     cargo run --package server
-    cargo run -- package client
+    cargo run --package client
 
-The last command (`cargo run -- package client`) can be run multiple times to simulate multiple clients. For the purposes of this demo, run this command 4 times to open 4 terminals (these will be referred to as A, B, C, D below). 
-When the client initializes, it will print a unique identifier for the player - these will be referred as `A_playerid, B_playerid, C_playerid, D_playerid`
+The last command (`cargo run --package client`) must be run multiple times to simulate multiple clients. **For the purposes of this demo, run this command 4 times to open 4 terminals** (these will be referred to as `A, B, C, D` below). 
+When the client initializes, it will print a unique identifier for the player - these will be referred as `A_playerid, B_playerid, C_playerid, D_playerid`. Please replace these in the below commands with the Client ID that is printed on the terminal.
+
+Now, commands can be issued in order as defined below. Note that `A/B/C/D` refer to the **terminal** in which the command (e.g. `invite_lobby A_lobbyid B_playerid`) must be issued.
+
+For instance, the instruction (A - `invite_lobby A_lobbyid B_playerid`) means to replace the appropriate IDs accordingly with A's lobby ID (as detailed below), B's client ID (as detailed above) and to type this command in **terminal A**. If unclear, please refer to the demo video which follows these instructions exactly.
+
+Continuing the demo (i.e. can issue these commands as detailed above in the terminals):
 
 A - `create_lobby Lobby1 Private NA Competitive`
 
-This will return a unique lobby identifier, and will be referred to as `A_lobbyid`
-
-Now, commands can be issued as defined below. Note that `A/B/C/D` refer to the terminal in which the command (e.g. `invite_lobby A_lobbyid B_playerid`) must be issued
+This will return the lobby information with a unique lobby identifier (labelled `ID`), and will be referred to as `A_lobbyid` from here on. Please replace this in the below commands.
 
 A - `invite_lobby A_lobbyid B_playerid`
 
@@ -354,7 +358,7 @@ At this point, this first lobby is ready to queue. We can move on to creating th
 
 C - `create_lobby Lobby2 Public NA Competitive`
 
-This will return a unique lobby identifier, and will be referred to as `C_lobbyid`
+Same as before, this will return the lobby information with a unique lobby identifier (labelled `ID`), and will be referred to as `C_lobbyid` from here on. Please replace this in the below commands.
 
 D - `get_public_lobbies NA`
 
@@ -390,7 +394,7 @@ A - `leave_game A_lobbyid`
 
 A - `delete_lobby A_lobbyid`
 
-D - `leave_game C_lobbyid`
+C - `leave_game C_lobbyid`
 
 C - `leave_lobby C_lobbyid`
 
